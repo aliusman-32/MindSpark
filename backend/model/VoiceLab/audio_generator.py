@@ -1,124 +1,163 @@
 from kokoro import KPipeline
 import torch
-import wave
 import numpy as np
 from diffusers import AudioLDMPipeline
 from pydub import AudioSegment
 import re
-import os 
+import os
+
 
 class AudioGenerator:
     def __init__(self):
-        self.pipe_narration = KPipeline("a", repo_id="hexgrad/Kokoro-82M")  # 'a' = American English
-        self.audio_dir = "Audio"
-        # create folder if it doesn't exist
-        os.makedirs(self.audio_dir, exist_ok=True)
-      
-    def generate(self,script_text,audio_filename):
-        PAUSE_MS = 800  # 0.8 second pause (change as you like)
-        script_text_clean = re.sub(r"\*\*Pause\*\*", "", script_text)
+        self.pipe_narration = KPipeline("a", repo_id="hexgrad/Kokoro-82M")
 
-        result = self.pipe_narration(script_text_clean, voice="af_jessica")
-        # Collect audio tensors
-        audio_tensors = []
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.sr = 24000
+        self.audio_dir = "Audio"
+        os.makedirs(self.audio_dir, exist_ok=True)
+
+        self.pipe_sfx = AudioLDMPipeline.from_pretrained(
+            "cvssp/audioldm-s-full-v2",
+            torch_dtype=torch.float32
+        ).to(self.device)
+
+        # narration speed ( <1 = slower, >1 = faster )
+        self.narration_speed = 0.85
+        self.emphasis_gain = 6
+
+    # --------------------------------------------------
+    # Parse script into timeline
+    # --------------------------------------------------
+    def parse_timeline(self, script):
+        timeline = []
+        cursor = 0
+
+        pattern = r"\*\*\[PAUSE\]\*\*|\[PAUSE\]|\[SFX:(.*?)\]|\*(.*?)\*"
+
+        for match in re.finditer(pattern, script):
+            if match.start() > cursor:
+                timeline.append(("TEXT", script[cursor:match.start()].strip()))
+
+            if match.group(0) == "**[PAUSE]**":
+                timeline.append(("PAUSE", 1000))
+            elif match.group(0) == "[PAUSE]":
+                timeline.append(("PAUSE", 500))
+            elif match.group(1):
+                timeline.append(("SFX", match.group(1).strip()))
+            elif match.group(2):
+                # emphasis WITHOUT repetition
+                timeline.append(("TEXT", match.group(2), {}))
+
+            cursor = match.end()
+
+        if cursor < len(script):
+            timeline.append(("TEXT", script[cursor:].strip()))
+
+        return [t for t in timeline if t[1]]
+
+    # --------------------------------------------------
+    # Generate narration chunk
+    # --------------------------------------------------
+    def generate_narration(self, text):
+        result = self.pipe_narration(text, voice="af_jessica")
+
+        chunks = []
         for chunk in result:
             if len(chunk) < 3:
                 continue
-            tensor = chunk[2]
-            if tensor.ndim > 1:
-                tensor = tensor.mean(dim=0)
-            audio_tensors.append(tensor)
+            t = chunk[2]
+            if t.ndim > 1:
+                t = t.mean(dim=0)
+            chunks.append(t)
 
-        full_audio = torch.cat(audio_tensors, dim=-1).cpu().numpy()
-        full_audio = full_audio / np.max(np.abs(full_audio))  # normalize
-        int16_audio = (full_audio * 32767).astype(np.int16)
+        audio = torch.cat(chunks).cpu().numpy()
+        audio /= np.max(np.abs(audio))
+        audio = (audio * 32767).astype(np.int16)
 
-        narration_file = os.path.join(self.audio_dir, f"narration_{audio_filename}.wav")
-        narration_sample_rate = 24000
-        with wave.open(str(narration_file), "wb") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(narration_sample_rate)
-            wf.writeframes(int16_audio.tobytes())
+        seg = AudioSegment(
+            audio.tobytes(),
+            frame_rate=self.sr,
+            sample_width=2,
+            channels=1
+        )
 
-        print(f"✅ Narration saved: {narration_file}")
+        # speed control
+        seg = seg._spawn(
+            seg.raw_data,
+            overrides={"frame_rate": int(seg.frame_rate * self.narration_speed)}
+        ).set_frame_rate(self.sr)
 
-        narration_audio = AudioSegment.from_wav(str(narration_file))
-        pause_positions = [m.start() for m in re.finditer(r"\*\*Pause\*\*", script_text)]
+        return seg
 
-        script_words = re.split(r'\s+', script_text)
-        total_words = len(script_words)
-        total_duration_ms = len(narration_audio)
+    # --------------------------------------------------
+    # MAIN FUNCTION
+    # --------------------------------------------------
+    def generate(self, script_text, audio_filename):
 
-        for pos in pause_positions:
-            words_before = len(re.split(r'\s+', script_text[:pos]))
-            pause_time_ms = int((words_before / total_words) * total_duration_ms)
+        timeline = self.parse_timeline(script_text)
 
-            silence = AudioSegment.silent(duration=PAUSE_MS)
-            narration_audio = (
-                narration_audio[:pause_time_ms]
-                + silence
-                + narration_audio[pause_time_ms:]
+        final_audio = AudioSegment.silent(0)
+        pause_positions = []
+        sfx_events = []
+
+        current_time = 0
+
+        for block in timeline:
+
+            if block[0] == "TEXT":
+                narration = self.generate_narration(block[1])
+                final_audio += narration
+                current_time += len(narration)
+
+            elif block[0] == "PAUSE":
+                pause_positions.append(current_time)
+                silence = AudioSegment.silent(block[1])
+                final_audio += silence
+                current_time += block[1]
+
+            elif block[0] == "SFX":
+                sfx_events.append((current_time, block[1]))
+
+        # --------------------------------------------------
+        # Overlay SFX
+        # --------------------------------------------------
+        mixed_audio = final_audio
+
+        for pos, prompt in sfx_events:
+            print(f"Generating SFX: {prompt}")
+
+            out = self.pipe_sfx(
+                prompt,
+                num_inference_steps=20,
+                audio_length_in_s=5.0,
+                guidance_scale=2.5
             )
-        
-        # ----------------------------
-        # 2. Parse SFX with exact position
-        # ----------------------------
-        sfx_matches = list(re.finditer(r"\[SFX:(.*?)\]", script_text))
-        if sfx_matches:
-            # Load narration to measure duration
-            narration_audio = AudioSegment.from_wav(str(narration_file))
-            total_duration_ms = len(narration_audio)  # in milliseconds
 
-            # Split script by words for timing
-            script_words = re.split(r'\s+', script_text)
-            total_words = len(script_words)
+            sfx = out.audios[0]
+            sfx /= np.max(np.abs(sfx))
+            sfx = (sfx * 32767).astype(np.int16)
 
-            # Initialize AudioLDM v1 pipeline
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            pipe_sfx = AudioLDMPipeline.from_pretrained(
-                "cvssp/audioldm-s-full-v2", torch_dtype=torch.float32
-            ).to(device)
+            sfx_audio = AudioSegment(
+                sfx.tobytes(),
+                frame_rate=16000,
+                sample_width=2,
+                channels=1
+            ).set_frame_rate(self.sr) - 15
 
-            mixed_audio = narration_audio
+            mixed_audio = mixed_audio.overlay(sfx_audio, position=pos)
 
-            for i, match in enumerate(sfx_matches):
-                sfx_prompt = match.group(1).strip()
-                # Compute approximate word index of this SFX
-                sfx_start_char = match.start()
-                words_before_sfx = len(re.split(r'\s+', script_text[:sfx_start_char]))
-                # Estimate position in ms
-                sfx_position_ms = int((words_before_sfx / total_words) * total_duration_ms)
+        # --------------------------------------------------
+        # Save files
+        # --------------------------------------------------
+        audio_path = os.path.join(self.audio_dir, f"{audio_filename}.wav")
+        mixed_audio.export(audio_path, format="wav")
 
-                # Generate SFX
-                print(f"Generating SFX {i+1}/{len(sfx_matches)}: '{sfx_prompt}'")
-                sfx_output = pipe_sfx(
-                    sfx_prompt,
-                    num_inference_steps=20,
-                    audio_length_in_s=5.0,
-                    guidance_scale=2.5
-                )
-                audio_sfx_np = sfx_output.audios[0]
-                audio_sfx_np /= np.max(np.abs(audio_sfx_np))
-                audio_sfx_int16 = (audio_sfx_np * 32767).astype(np.int16)
+        pause_file = os.path.join(self.audio_dir, f"{audio_filename}_pauses.txt")
+        with open(pause_file, "w") as f:
+            for i, t in enumerate(pause_positions, 1):
+                f.write(f"PAUSE {i}: {t} ms\n")
 
-                sfx_audio = AudioSegment(
-                        audio_sfx_int16.tobytes(),
-                        frame_rate=16000,
-                        sample_width=2,   # int16 = 2 bytes
-                        channels=1
-                    )
+        print("✅ Narration, pauses, and SFX generated correctly")
+        print("✅ Pause timestamps saved")
 
-                # Overlay SFX at correct position
-                sfx_audio = sfx_audio.set_frame_rate(narration_sample_rate).set_channels(1)
-                sfx_audio = sfx_audio - 5  # reduce volume
-                mixed_audio = mixed_audio.overlay(sfx_audio, position=sfx_position_ms)
-
-            final_file = os.path.join(self.audio_dir, f"{audio_filename}.wav")
-            mixed_audio.export(final_file, format="wav")
-            print(f"✅ Final mixed track saved: {final_file}")
-            return 0
-        
-        else:
-            print("No SFX tags found in script. Only narration generated")
-        return  1
+        return pause_positions
