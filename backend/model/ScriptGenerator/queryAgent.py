@@ -21,7 +21,7 @@ class QueryAgent:
     def __init__(self):
         self.apiKey = os.getenv("GOOGLE_API_KEY")
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash", 
+            model="gemini-2.5-flash", 
             google_api_key=self.apiKey, 
             temperature=0.7
         )
