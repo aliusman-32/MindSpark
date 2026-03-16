@@ -31,29 +31,45 @@ class AudioGenerator:
     def parse_timeline(self, script):
         timeline = []
         cursor = 0
+        first_pause_handled = False  # Track first chapter-start pause
 
-        pattern = r"\*\*\[PAUSE\]\*\*|\[PAUSE\]|\[SFX:(.*?)\]|\*(.*?)\*"
+        pattern = r"\*\*\[PAUSE\]\*\*|\[PAUSE(?:\s*[\d.]+s)?\]|\[SFX:(.*?)\]|\*(.*?)\*"
 
         for match in re.finditer(pattern, script):
             if match.start() > cursor:
-                timeline.append(("TEXT", script[cursor:match.start()].strip()))
+                text_segment = script[cursor:match.start()].strip()
+                if text_segment:
+                    timeline.append(("TEXT", text_segment))
 
-            if match.group(0) == "**[PAUSE]**":
-                timeline.append(("PAUSE", 1000))
-            elif match.group(0) == "[PAUSE]":
+            matched = match.group(0)
+            pre_char = script[match.start()-1] if match.start() > 0 else ""
+            post_char = script[match.end():match.end()+1] if match.end() < len(script) else ""
+
+            # First chapter-start pause
+            if not first_pause_handled and (matched.startswith("[PAUSE") or matched == "**[PAUSE]**") and post_char == "\n":
+                timeline.append(("pause_position", 1000))
+                first_pause_handled = True
+            # Pauses surrounded by newlines in the middle of script
+            elif (matched.startswith("[PAUSE") or matched == "**[PAUSE]**") and pre_char == "\n" and post_char == "\n":
+                timeline.append(("pause_position", 1000))
+            # Other pauses
+            elif matched.startswith("[PAUSE") or matched == "**[PAUSE]**":
                 timeline.append(("PAUSE", 500))
+            # SFX
             elif match.group(1):
                 timeline.append(("SFX", match.group(1).strip()))
+            # Emphasis
             elif match.group(2):
-                # emphasis WITHOUT repetition
                 timeline.append(("TEXT", match.group(2), {}))
 
             cursor = match.end()
 
         if cursor < len(script):
-            timeline.append(("TEXT", script[cursor:].strip()))
+            remaining_text = script[cursor:].strip()
+            if remaining_text:
+                timeline.append(("TEXT", remaining_text))
 
-        return [t for t in timeline if t[1]]
+        return timeline
 
     # --------------------------------------------------
     # Generate narration chunk
@@ -109,7 +125,7 @@ class AudioGenerator:
                 final_audio += narration
                 current_time += len(narration)
 
-            elif block[0] == "PAUSE":
+            elif block[0] == "pause_position":
                 pause_positions.append(current_time)
                 silence = AudioSegment.silent(block[1])
                 final_audio += silence
@@ -158,6 +174,7 @@ class AudioGenerator:
                 f.write(f"PAUSE {i}: {t} ms\n")
 
         print("✅ Narration, pauses, and SFX generated correctly")
+        print("✅ Natural pauses (no shock)")
         print("✅ Pause timestamps saved")
 
         return pause_positions
