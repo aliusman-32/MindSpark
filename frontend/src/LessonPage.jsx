@@ -198,6 +198,34 @@ function LessonPage() {
     }
   }
 
+  const generateQuiz = async () => {
+    if (!lessonId) {
+      alert('No lesson available. Generate a script first.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const token = localStorage.getItem('mindspark_token');
+      const response = await fetch('http://localhost:8000/generate-quiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ lesson_id: lessonId })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'Failed to generate quiz');
+      // Show a simple success message and store quiz in localStorage for assessment page
+      try { localStorage.setItem(`lesson_${lessonId}_quiz`, JSON.stringify(data.quiz)); } catch (e) {}
+      alert('Quiz generated successfully. Open Assessment to view it.');
+      navigate('/assessment');
+    } catch (err) {
+      console.error('Error generating quiz:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Determine loading message
   const loadingMessage = currentStep === 'script' ? 'Generating script...' 
                        : currentStep === 'audio' ? 'Generating audio...' 
@@ -304,12 +332,22 @@ function LessonPage() {
 
         {/* Next button */}
         <div className="mt-6">
-          <button
-            onClick={handleNext}
-            className="w-full rounded-full bg-purple-600 hover:bg-purple-700 text-white font-extrabold py-4 shadow-lg"
-          >
-            Next ▶
-          </button>
+          {progress >= 100 ? (
+            <button
+              onClick={generateQuiz}
+              disabled={loading || videoLoading}
+              className="w-full rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-4 shadow-lg"
+            >
+              {loading ? 'Generating Quiz...' : 'Generate Quiz'}
+            </button>
+          ) : (
+            <button
+              onClick={handleNext}
+              className="w-full rounded-full bg-purple-600 hover:bg-purple-700 text-white font-extrabold py-4 shadow-lg"
+            >
+              Next ▶
+            </button>
+          )}
         </div>
 
         {/* Bottom navigation */}

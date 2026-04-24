@@ -1,15 +1,62 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
+function Notice({ type, message }) {
+  if (!message) return null;
+
+  const styles =
+    type === 'success'
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+      : 'border-rose-200 bg-rose-50 text-rose-800';
+
+  const icon = type === 'success' ? '✓' : '✕';
+
+  return (
+    <div className={`mb-6 flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm font-semibold ${styles}`} role="status" aria-live="polite">
+      <div className="mt-0.5 flex size-6 items-center justify-center rounded-full bg-white/80 text-base font-black">
+        {icon}
+      </div>
+      <div>{message}</div>
+    </div>
+  );
+}
+
 function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [notice, setNotice] = useState(null);
   const navigate = useNavigate();
 
   function handleSubmit(event) {
     event.preventDefault();
-    // Placeholder: after "login" navigate to home
-    navigate('/home');
+    (async () => {
+      setNotice(null);
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          // store token and user info
+          try {
+            const toStore = { user_id: data.user_id };
+            if (data.email) toStore.email = data.email;
+            else if (email) toStore.email = email;
+            localStorage.setItem('mindspark_user', JSON.stringify(toStore));
+            if (data.access_token) localStorage.setItem('mindspark_token', data.access_token);
+          } catch (e) {}
+          setNotice({ type: 'success', message: 'Login successful. Redirecting to your home page.' });
+          setTimeout(() => navigate('/home'), 700);
+        } else {
+          const body = await res.json().catch(() => ({}));
+          setNotice({ type: 'error', message: body.detail || body.message || 'Invalid credentials' });
+        }
+      } catch (err) {
+        setNotice({ type: 'error', message: 'Network error. Please try again.' });
+      }
+    })();
   }
 
   return (
@@ -19,6 +66,8 @@ function LoginPage() {
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-purple-600 tracking-tight">MindSpark</h1>
           <p className="mt-3 text-gray-600 font-medium text-base lg:text-lg">Welcome back! Log in to continue.</p>
         </div>
+
+        <Notice type={notice?.type} message={notice?.message} />
 
         <form onSubmit={handleSubmit} className="space-y-5 lg:space-y-6">
           <div>
@@ -57,7 +106,7 @@ function LoginPage() {
 
           <button
             type="submit"
-            className="w-full rounded-xl bg-pink-500 hover:bg-pink-600 active:bg-pink-700 text-white font-bold py-3.5 lg:py-4 text-base lg:text-lg shadow-md transition-colors"
+            className="w-full rounded-xl border border-orange-300 bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 active:from-orange-700 active:to-pink-700 text-white font-bold py-3.5 lg:py-4 text-base lg:text-lg shadow-lg shadow-orange-200 transition-colors"
           >
             Log In
           </button>
@@ -77,5 +126,3 @@ function LoginPage() {
 }
 
 export default LoginPage;
-
-

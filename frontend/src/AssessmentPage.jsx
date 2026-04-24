@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 
 const sampleQuestions = [
@@ -27,11 +27,55 @@ const sampleQuestions = [
 ];
 
 function AssessmentPage() {
-  const questions = useMemo(() => sampleQuestions, []);
+  const [questions, setQuestions] = useState(sampleQuestions);
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState(null);
   const [completed, setCompleted] = useState(false);
   const [score, setScore] = useState(0);
+
+  useEffect(() => {
+    // Try to load quiz from backend for last lesson stored in localStorage
+    (async () => {
+      try {
+        const token = localStorage.getItem('mindspark_token');
+        // If we have a lesson id from localStorage, try to fetch quizzes
+        const lastQuizKey = Object.keys(localStorage).reverse().find(k => k.startsWith('lesson_') && k.endsWith('_quiz'));
+        let lessonId = null;
+        if (lastQuizKey) {
+          const match = lastQuizKey.match(/^lesson_(\d+)_quiz$/);
+          if (match) lessonId = match[1];
+        }
+        if (!lessonId) return;
+        const url = `http://localhost:8000/quizzes?lesson_id=${lessonId}`;
+        const res = await fetch(url, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
+        if (!res.ok) return;
+        const body = await res.json();
+        const quizzes = body.quizzes || [];
+        if (quizzes.length > 0) {
+          // use first quiz
+          const q = quizzes[0].quiz;
+          if (q) {
+            // convert to internal format: array of { id, text, options, correct }
+            const converted = Object.keys(q).map((k, i) => {
+              const qi = q[k];
+              if (qi.question_type === 'mcq') {
+                const options = [];
+                // correct + wrong_options
+                options.push({ id: 'a', label: qi.correct_answer, color: 'bg-green-400' });
+                (qi.wrong_options || []).slice(0,3).forEach((w, idx) => options.push({ id: String.fromCharCode(98+idx), label: w, color: 'bg-red-400' }));
+                return { id: k, text: qi.question, options, correct: 'a' };
+              }
+              // fallback short/true_false/blank
+              return { id: k, text: qi.question || '', options: [{ id: 'a', label: qi.correct_answer || 'Answer', color: 'bg-green-400' }], correct: 'a' };
+            });
+            setQuestions(converted);
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+    })();
+  }, []);
 
   const current = questions[index];
   const total = questions.length;
