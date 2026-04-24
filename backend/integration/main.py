@@ -8,6 +8,8 @@ import os
 load_dotenv()
 
 from api import router
+from routers.quizzes import quiz_router
+from database import Base, engine
 
 app = FastAPI()
 
@@ -20,6 +22,10 @@ app.add_middleware(
 )
 
 app.include_router(router)
+app.include_router(quiz_router)
+
+# Ensure database tables exist at startup
+Base.metadata.create_all(bind=engine)
 
 # Create Audio folder if it doesn't exist
 os.makedirs("Audio", exist_ok=True)

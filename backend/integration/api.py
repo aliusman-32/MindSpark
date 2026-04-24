@@ -3,6 +3,10 @@ import concurrent.futures
 import json
 import os
 import sys
+import re
+import hashlib
+import secrets
+from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, List, Dict
@@ -19,9 +23,9 @@ from backend.model.ScriptGenerator.scriptGenerator import ScriptGenerator
 from backend.model.VoiceLab.audio_generator import AudioGenerator
 from backend.model.ScriptGenerator.podcastPipeline import PodcastPipeline
 from backend.model.AgeClassifier import AgeContentGuard
-from backend.model.VideoGenerator import VideoGenerator   # new import
+from backend.model.VideoGenerator import VideoGenerator
 
-from database import get_db, ContentPrompt, VisualLesson, ChildProfile
+from database import get_db, ContentPrompt, VisualLesson, ChildProfile, User
 from sqlalchemy.orm import Session
 from script_clean import clean_script_for_display
 
@@ -36,6 +40,7 @@ podcast_pipeline = PodcastPipeline()
 
 # Initialize the age classifier
 age_guard = AgeContentGuard()
+
 
 # ------------------- Pydantic models -------------------
 class ScriptRequest(BaseModel):
@@ -80,6 +85,93 @@ class VideoResponse(BaseModel):
     video_url: str
     video_path: str
     lesson_id: int
+
+
+class SignupRequest(BaseModel):
+    fullName: str
+    email: str
+    password: str
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+def _hash_password(password: str) -> str:
+    salt = secrets.token_bytes(16)
+    password_hash = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100000)
+    return f"pbkdf2_sha256${salt.hex()}${password_hash.hex()}"
+
+
+def _verify_password(password: str, stored_hash: str) -> bool:
+    if not stored_hash:
+        return False
+    if stored_hash.startswith("pbkdf2_sha256$"):
+        try:
+            _, salt_hex, hash_hex = stored_hash.split("$", 2)
+            salt = bytes.fromhex(salt_hex)
+            expected_hash = bytes.fromhex(hash_hex)
+            actual_hash = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100000)
+            return secrets.compare_digest(actual_hash, expected_hash)
+        except Exception:
+            return False
+    return secrets.compare_digest(password, stored_hash)
+
+
+def _format_display_name(full_name: Optional[str], email: str):
+    if full_name and full_name.strip():
+        return full_name.strip()
+    local_part = (email or "").split("@")[0].strip()
+    return local_part.replace(".", " ").replace("_", " ").title() or "User"
+
+
+@router.post("/signup")
+async def signup(request: SignupRequest, db: Session = Depends(get_db)):
+    email = request.email.strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required")
+    if not request.password:
+        raise HTTPException(status_code=400, detail="Password is required")
+
+    existing_user = db.query(User).filter(User.email == email).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="An account with this email already exists")
+
+    new_user = User(
+        email=email,
+        password_hash=_hash_password(request.password),
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    return {
+        "message": "Account created successfully",
+        "user_id": new_user.user_id,
+        "email": new_user.email,
+        "fullName": _format_display_name(request.fullName, new_user.email),
+    }
+
+
+@router.post("/login")
+async def login(request: LoginRequest, db: Session = Depends(get_db)):
+    email = request.email.strip().lower()
+    user = db.query(User).filter(User.email == email).first()
+    if not user or not _verify_password(request.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    token = secrets.token_urlsafe(32)
+    user.last_login = datetime.utcnow()
+    db.commit()
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user_id": user.user_id,
+        "email": user.email,
+        "fullName": _format_display_name(None, user.email),
+    }
 
 # ------------------- Endpoint 1: Generate Script -------------------
 @router.post("/generate-script", response_model=ScriptResponse)

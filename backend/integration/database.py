@@ -46,6 +46,7 @@ class User(Base):
 
     # Relationship to child profiles (one-to-many)
     children = relationship("ChildProfile", back_populates="user")
+    quiz_attempts = relationship("QuizAttempt", back_populates="user")
 
 class ChildProfile(Base):
     __tablename__ = "child_profiles"
@@ -60,6 +61,7 @@ class ChildProfile(Base):
 
     user = relationship("User", back_populates="children")
     prompts = relationship("ContentPrompt", back_populates="child")
+    quiz_attempts = relationship("QuizAttempt", back_populates="child")
 
 class Category(Base):
     __tablename__ = "categories"
@@ -101,6 +103,39 @@ class VisualLesson(Base):
 
     category = relationship("Category", back_populates="lessons")
     prompt = relationship("ContentPrompt", back_populates="lesson")
+    quizzes = relationship("LessonQuiz", back_populates="lesson")
+
+
+class LessonQuiz(Base):
+    __tablename__ = "lesson_quizzes"
+    quiz_id = Column(Integer, primary_key=True, index=True)
+    lesson_id = Column(Integer, ForeignKey("visual_lessons.lesson_id", ondelete="CASCADE", onupdate="CASCADE"))
+    quiz_json = Column(Text)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    lesson = relationship("VisualLesson", back_populates="quizzes")
+    attempts = relationship("QuizAttempt", back_populates="quiz")
+
+
+class QuizAttempt(Base):
+    __tablename__ = "quiz_attempts"
+    attempt_id = Column(Integer, primary_key=True, index=True)
+    quiz_id = Column(Integer, ForeignKey("lesson_quizzes.quiz_id", ondelete="CASCADE", onupdate="CASCADE"))
+    lesson_id = Column(Integer, ForeignKey("visual_lessons.lesson_id", ondelete="CASCADE", onupdate="CASCADE"))
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="SET NULL", onupdate="CASCADE"), nullable=True)
+    child_id = Column(Integer, ForeignKey("child_profiles.child_id", ondelete="SET NULL", onupdate="CASCADE"), nullable=True)
+    score = Column(Integer, default=0)
+    total_questions = Column(Integer, default=0)
+    correct_count = Column(Integer, default=0)
+    incorrect_count = Column(Integer, default=0)
+    percentage = Column(Integer, default=0)
+    answers_json = Column(Text)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    quiz = relationship("LessonQuiz", back_populates="attempts")
+    lesson = relationship("VisualLesson")
+    user = relationship("User", back_populates="quiz_attempts")
+    child = relationship("ChildProfile", back_populates="quiz_attempts")
 
 # ------------------- Helper function to get a database session -------------------
 def get_db():
