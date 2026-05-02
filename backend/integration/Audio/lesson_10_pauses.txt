@@ -1,0 +1,2 @@
+PAUSE 1: 103471 ms
+PAUSE 2: 217322 ms

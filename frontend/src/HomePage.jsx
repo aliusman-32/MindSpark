@@ -29,6 +29,27 @@ function Card({ title, subtitle, color }) {
 function HomePage() {
   const navigate = useNavigate();
   const [prompt, setPrompt] = useState('');
+  const [displayName, setDisplayName] = useState('Aliza');
+
+  React.useEffect(() => {
+    try {
+      const item = localStorage.getItem('mindspark_user');
+      if (!item) return;
+      const parsed = JSON.parse(item);
+      if (parsed) {
+        // Prefer full name if stored, else derive from email local-part
+        if (parsed.fullName) {
+          setDisplayName(parsed.fullName);
+        } else if (parsed.email) {
+          const namePart = parsed.email.split('@')[0];
+          // Capitalize first letter
+          setDisplayName(namePart.charAt(0).toUpperCase() + namePart.slice(1));
+        }
+      }
+    } catch (e) {
+      // keep default
+    }
+  }, []);
 
   const handleSend = () => {
     if (!prompt.trim()) {
@@ -48,7 +69,13 @@ function HomePage() {
             <div className="text-xl sm:text-2xl font-extrabold text-purple-700">MindSpark</div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="hidden sm:block text-sm sm:text-base text-gray-700 font-semibold">Hello, Aliza!</div>
+            <div className="hidden sm:block text-sm sm:text-base text-gray-700 font-semibold">Hello, {displayName}!</div>
+            <button
+              onClick={() => navigate('/login', { replace: true })}
+              className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-extrabold text-rose-700 shadow-sm hover:bg-rose-100 hover:border-rose-300 transition-colors"
+            >
+              Logout
+            </button>
             <div className="w-9 h-9 rounded-full bg-amber-200 border border-amber-300 flex items-center justify-center">🟡</div>
           </div>
         </header>

@@ -1,61 +1,87 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 
-const sampleHistory = [
-  { id: 1, title: 'The Water Cycle', type: 'Science Lesson', when: 'Today at 2:30 PM', color: '#EAD9FE', badge: '🔔' },
-  { id: 2, title: 'The Thirsty Crow', type: 'Story', when: 'Yesterday at 4:15 PM', color: '#FAD0D9', badge: '🟥' },
-  { id: 3, title: 'The Solar System', type: 'Science Lesson', when: '2 days ago at 11:00 AM', color: '#CFF3FB', badge: '🟠' },
-];
-
-function FilterPill({ active, children }) {
-  return (
-    <button className={`${active ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-700'} rounded-full px-4 py-2 font-semibold`}>{children}</button>
-  );
-}
-
-function Item({ title, type, when, color, badge }) {
-  return (
-    <div className="rounded-3xl p-5 shadow-sm flex items-center justify-between" style={{ background: color }}>
-      <div className="flex items-center gap-4">
-        <div className="w-14 h-14 rounded-2xl bg-white/70 flex items-center justify-center text-2xl">{badge}</div>
-        <div>
-          <div className="text-xl font-extrabold text-purple-700">{title}</div>
-          <div className="text-sm text-gray-700 font-semibold">{type}</div>
-          <div className="text-xs text-gray-500">Completed: {when}</div>
-        </div>
-      </div>
-      <button className="w-12 h-12 rounded-full bg-gradient-to-r from-pink-500 to-purple-500 text-white text-lg font-bold shadow-md">▶</button>
-    </div>
-  );
-}
-
 function HistoryPage() {
+  const childId = 1; // TODO: replace with actual childId from authentication
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [sort, setSort] = useState('Newest');
-  const items = useMemo(() => sampleHistory, []);
+
+  useEffect(() => {
+    async function fetchHistory() {
+      try {
+        const response = await fetch(`http://localhost:8000/history/${childId}`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'Failed to fetch history');
+        setHistory(data);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchHistory();
+  }, [childId]);
+
+  const sorted = useMemo(() => {
+    const copy = [...history];
+    if (sort === 'Newest') return copy.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    else return copy.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  }, [history, sort]);
+
+  const getColor = (type) => (type === 'lesson' ? '#CFF3FB' : '#EAD9FE');
+  const getBadge = (type) => (type === 'lesson' ? '📘' : '📝');
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-b from-purple-200 to-purple-300 p-6 lg:p-10">
-      <div className="mx-auto max-w-5xl bg-white rounded-[28px] p-6 sm:p-8 lg:p-10 shadow-xl">
+      <div className="mx-auto max-w-5xl bg-white rounded-3xl p-6 sm:p-8 lg:p-10 shadow-xl">
         <h1 className="text-center text-3xl sm:text-4xl font-extrabold text-purple-600">My Learning History</h1>
 
-        <div className="mt-6 flex flex-wrap items-center gap-3 justify-between">
-          <div className="flex flex-wrap gap-3">
-            <FilterPill active>All</FilterPill>
-            <FilterPill>Stories</FilterPill>
-            <FilterPill>Science</FilterPill>
-            <FilterPill>History</FilterPill>
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex gap-3">
+            <button className="bg-purple-600 text-white rounded-full px-4 py-2 font-semibold">All</button>
+            <button className="bg-purple-100 text-purple-700 rounded-full px-4 py-2 font-semibold">Stories</button>
+            <button className="bg-purple-100 text-purple-700 rounded-full px-4 py-2 font-semibold">Science</button>
           </div>
-          <div>
-            <select value={sort} onChange={(e) => setSort(e.target.value)} className="rounded-full bg-gray-100 px-4 py-2 font-semibold">
-              <option>Newest</option>
-              <option>Oldest</option>
-            </select>
-          </div>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+            className="rounded-full bg-gray-100 px-4 py-2 font-semibold"
+          >
+            <option>Newest</option>
+            <option>Oldest</option>
+          </select>
         </div>
 
         <div className="mt-6 space-y-5">
-          {items.map((it) => (
-            <Item key={it.id} title={it.title} type={it.type} when={it.when} color={it.color} badge={it.badge} />
+          {loading && <div className="text-center text-purple-700">Loading history...</div>}
+          {error && <div className="text-center text-red-600">{error}</div>}
+          {!loading && !error && sorted.length === 0 && (
+            <div className="text-center text-gray-600">No history yet. Start a lesson!</div>
+          )}
+          {sorted.map((item, idx) => (
+            <div
+              key={idx}
+              className="rounded-3xl p-5 shadow-sm flex items-center justify-between"
+              style={{ background: getColor(item.item_type) }}
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-white/70 flex items-center justify-center text-2xl">
+                  {getBadge(item.item_type)}
+                </div>
+                <div>
+                  <div className="text-xl font-extrabold text-purple-700">{item.title}</div>
+                  <div className="text-sm text-gray-700 font-semibold">{item.subtitle}</div>
+                  <div className="text-xs text-gray-500">
+                    Completed: {new Date(item.created_at).toLocaleString()}
+                  </div>
+                </div>
+              </div>
+              <button className="w-12 h-12 rounded-full bg-gradient-to-r from-pink-500 to-purple-500 text-white text-lg font-bold shadow-md">
+                ▶
+              </button>
+            </div>
           ))}
         </div>
 
@@ -71,5 +97,3 @@ function HistoryPage() {
 }
 
 export default HistoryPage;
-
-

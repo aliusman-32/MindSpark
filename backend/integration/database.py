@@ -4,35 +4,29 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 import datetime
 
-# Read database credentials from environment variables
 DB_HOST = os.getenv("DB_HOST", "sql.freedb.tech")
 DB_PORT = os.getenv("DB_PORT", "3306")
 DB_NAME = os.getenv("DB_NAME", "freedb_mindspark")
 DB_USER = os.getenv("DB_USER", "freedb_mindspark")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 
-# Construct the database URL for SQLAlchemy
 DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
-# Create the engine (the connection to the database)
 engine = create_engine(
     DATABASE_URL,
     connect_args={
-        "connect_timeout": 10,        # seconds to wait for connection
-        "read_timeout": 30,            # seconds to wait for query
-        "write_timeout": 30
+        "connect_timeout": 10,
+        "read_timeout": 400,
+        "write_timeout": 60
     },
-    pool_pre_ping=True,                # test connections before using
-    pool_recycle=300                    # recycle connections every 5 minutes
+    pool_pre_ping=True,
+    pool_recycle=1800,
+    pool_size=5,
+    max_overflow=10
 )
 
-# Create a session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-# Base class for all models
 Base = declarative_base()
-
-# ------------------- Define Tables as Python Classes -------------------
 
 class User(Base):
     __tablename__ = "users"
@@ -44,8 +38,8 @@ class User(Base):
     last_login = Column(DateTime)
     is_active = Column(Integer, default=1)
 
-    # Relationship to child profiles (one-to-many)
     children = relationship("ChildProfile", back_populates="user")
+    quiz_attempts = relationship("QuizAttempt", back_populates="user")
 
 class ChildProfile(Base):
     __tablename__ = "child_profiles"
@@ -60,6 +54,7 @@ class ChildProfile(Base):
 
     user = relationship("User", back_populates="children")
     prompts = relationship("ContentPrompt", back_populates="child")
+    quiz_attempts = relationship("QuizAttempt", back_populates="child")
 
 class Category(Base):
     __tablename__ = "categories"
@@ -75,11 +70,11 @@ class ContentPrompt(Base):
     prompt_id = Column(Integer, primary_key=True, index=True)
     child_id = Column(Integer, ForeignKey("child_profiles.child_id", ondelete="CASCADE", onupdate="CASCADE"))
     prompt_text = Column(Text)
-    generated_topic = Column(Text)   # We'll store the generated script here
+    generated_topic = Column(Text)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     child = relationship("ChildProfile", back_populates="prompts")
-    lesson = relationship("VisualLesson", back_populates="prompt", uselist=False)  # one-to-one
+    lesson = relationship("VisualLesson", back_populates="prompt", uselist=False)
 
 class VisualLesson(Base):
     __tablename__ = "visual_lessons"
@@ -87,22 +82,60 @@ class VisualLesson(Base):
     category_id = Column(Integer, ForeignKey("categories.category_id", ondelete="CASCADE", onupdate="CASCADE"))
     prompt_id = Column(Integer, ForeignKey("content_prompts.prompt_id", ondelete="CASCADE", onupdate="CASCADE"))
     title = Column(String(255))
-    description = Column(Text)                # full script
+    description = Column(Text)
     visual_url = Column(String(255))
     thumbnail_url = Column(String(255))
-    narration = Column(String(255))           # path to audio file
+    narration = Column(String(255))
     duration_seconds = Column(Integer)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     difficulty_level = Column(String(50))
-
-    # New columns for video generation
-    chapters_json = Column(Text, nullable=True)        # JSON of chapters (title + key_points)
-    pause_positions_json = Column(Text, nullable=True) # list of chapter start times in ms
+    chapters_json = Column(Text, nullable=True)
+    pause_positions_json = Column(Text, nullable=True)
 
     category = relationship("Category", back_populates="lessons")
     prompt = relationship("ContentPrompt", back_populates="lesson")
+    quizzes = relationship("LessonQuiz", back_populates="lesson")
 
-# ------------------- Helper function to get a database session -------------------
+class LessonQuiz(Base):
+    __tablename__ = "lesson_quizzes"
+    quiz_id = Column(Integer, primary_key=True, index=True)
+    lesson_id = Column(Integer, ForeignKey("visual_lessons.lesson_id", ondelete="CASCADE", onupdate="CASCADE"))
+    quiz_json = Column(Text)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    lesson = relationship("VisualLesson", back_populates="quizzes")
+    attempts = relationship("QuizAttempt", back_populates="quiz")
+
+class QuizAttempt(Base):
+    __tablename__ = "quiz_attempts"
+    attempt_id = Column(Integer, primary_key=True, index=True)
+    quiz_id = Column(Integer, ForeignKey("lesson_quizzes.quiz_id", ondelete="CASCADE", onupdate="CASCADE"))
+    lesson_id = Column(Integer, ForeignKey("visual_lessons.lesson_id", ondelete="CASCADE", onupdate="CASCADE"))
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="SET NULL", onupdate="CASCADE"), nullable=True)
+    child_id = Column(Integer, ForeignKey("child_profiles.child_id", ondelete="SET NULL", onupdate="CASCADE"), nullable=True)
+    score = Column(Integer, default=0)
+    total_questions = Column(Integer, default=0)
+    correct_count = Column(Integer, default=0)
+    incorrect_count = Column(Integer, default=0)
+    percentage = Column(Integer, default=0)
+    answers_json = Column(Text)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    quiz = relationship("LessonQuiz", back_populates="attempts")
+    lesson = relationship("VisualLesson")
+    user = relationship("User", back_populates="quiz_attempts")
+    child = relationship("ChildProfile", back_populates="quiz_attempts")
+
+class AssessmentResult(Base):
+    __tablename__ = "assessment_results"
+    assessment_id = Column(Integer, primary_key=True, index=True)
+    child_id = Column(Integer, ForeignKey("child_profiles.child_id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False, index=True)
+    lesson_id = Column(Integer, ForeignKey("visual_lessons.lesson_id", ondelete="SET NULL", onupdate="CASCADE"), nullable=True, index=True)
+    topic_title = Column(String(255), nullable=False)
+    score = Column(Integer, nullable=False)
+    total_questions = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
 def get_db():
     db = SessionLocal()
     try:

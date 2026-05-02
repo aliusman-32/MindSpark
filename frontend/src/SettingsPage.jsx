@@ -34,11 +34,41 @@ function Toggle({ checked, onChange }) {
 function SettingsPage() {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState(false);
+  const [displayName, setDisplayName] = useState('Guest');
+
+  React.useEffect(() => {
+    try {
+      const item = localStorage.getItem('mindspark_user');
+      if (!item) return;
+      const parsed = JSON.parse(item);
+      if (parsed?.fullName) {
+        setDisplayName(parsed.fullName);
+      } else if (parsed?.email) {
+        const namePart = parsed.email.split('@')[0];
+        setDisplayName(namePart.charAt(0).toUpperCase() + namePart.slice(1));
+      }
+    } catch (e) {
+      setDisplayName('Guest');
+    }
+  }, []);
+
+  const handleLogout = () => {
+    try {
+      localStorage.removeItem('mindspark_user');
+      localStorage.removeItem('mindspark_token');
+    } catch (e) {}
+    navigate('/login', { replace: true });
+  };
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-b from-purple-200 to-purple-300 p-6 lg:p-10">
       <div className="mx-auto max-w-5xl bg-white rounded-[28px] p-6 sm:p-8 lg:p-10 shadow-xl">
         <h1 className="text-center text-3xl sm:text-4xl font-extrabold text-purple-600">Settings ⚙️</h1>
+
+        <div className="mt-6 rounded-3xl bg-purple-50 border border-purple-100 px-5 py-4 text-center">
+          <div className="text-sm font-semibold text-purple-700">Signed in as</div>
+          <div className="text-xl sm:text-2xl font-extrabold text-gray-900">{displayName}</div>
+        </div>
 
         <div className="mt-8 space-y-4">
           <Link to="/profile">
@@ -56,10 +86,10 @@ function SettingsPage() {
 
         <div className="mt-8">
           <button
-            onClick={() => navigate('/login')}
+            onClick={handleLogout}
             className="w-full rounded-full bg-rose-400 hover:bg-rose-500 text-white font-extrabold py-4 shadow-lg"
           >
-            Logout 🪪
+            Logout {displayName} 🪪
           </button>
         </div>
 
@@ -75,5 +105,3 @@ function SettingsPage() {
 }
 
 export default SettingsPage;
-
-
