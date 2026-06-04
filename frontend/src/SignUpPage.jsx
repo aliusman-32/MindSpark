@@ -1,23 +1,64 @@
 // src/SignupPage.jsx
 
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+
+function Notice({ type, message }) {
+  if (!message) return null;
+
+  const styles =
+    type === 'success'
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+      : 'border-rose-200 bg-rose-50 text-rose-800';
+
+  const icon = type === 'success' ? '✓' : '✕';
+
+  return (
+    <div className={`mb-6 flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm font-semibold ${styles}`} role="status" aria-live="polite">
+      <div className="mt-0.5 flex size-6 items-center justify-center rounded-full bg-white/80 text-base font-black">
+        {icon}
+      </div>
+      <div>{message}</div>
+    </div>
+  );
+}
 
 const SignUpPage = () => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [notice, setNotice] = useState(null);
 
-  function handleSubmit(e) {
+  const navigate = useNavigate();
+
+  async function handleSubmit(e) {
     e.preventDefault();
+    setNotice(null);
     if (password !== confirm) {
-      // eslint-disable-next-line no-alert
-      alert('Passwords do not match');
+      setNotice({ type: 'error', message: 'Passwords do not match.' });
       return;
     }
-    // eslint-disable-next-line no-alert
-    alert(`Signing up ${fullName}`);
+    try {
+      const res = await fetch('/api/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fullName, email, password }),
+      });
+      if (res.ok) {
+        try {
+          localStorage.removeItem('mindspark_token');
+          localStorage.removeItem('mindspark_user');
+        } catch (e) {}
+        setNotice({ type: 'success', message: 'Account created successfully. Redirecting to login.' });
+        setTimeout(() => navigate('/login', { replace: true }), 700);
+      } else {
+        const body = await res.json().catch(() => ({}));
+        setNotice({ type: 'error', message: body.detail || body.message || 'Signup failed' });
+      }
+    } catch (err) {
+      setNotice({ type: 'error', message: 'Network error. Please try again.' });
+    }
   }
 
   return (
@@ -27,6 +68,8 @@ const SignUpPage = () => {
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-purple-600 tracking-tight">MindSpark</h1>
           <p className="mt-3 text-gray-600 font-medium text-base lg:text-lg">Create your account to get started.</p>
         </div>
+
+        <Notice type={notice?.type} message={notice?.message} />
 
         <form onSubmit={handleSubmit} className="space-y-5 lg:space-y-6">
           <div>
@@ -83,7 +126,7 @@ const SignUpPage = () => {
 
           <button
             type="submit"
-            className="w-full rounded-xl bg-pink-500 hover:bg-pink-600 active:bg-pink-700 text-white font-bold py-3.5 lg:py-4 text-base lg:text-lg shadow-md transition-colors"
+            className="w-full rounded-xl border border-orange-300 bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 active:from-orange-700 active:to-pink-700 text-white font-bold py-3.5 lg:py-4 text-base lg:text-lg shadow-lg shadow-orange-200 transition-colors"
           >
             Sign Up
           </button>

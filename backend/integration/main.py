@@ -4,10 +4,11 @@ from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 import os
 
-# Load environment variables from .env file
 load_dotenv()
 
 from api import router
+from routers.quizzes import quiz_router
+from database import Base, engine
 
 app = FastAPI()
 
@@ -20,14 +21,13 @@ app.add_middleware(
 )
 
 app.include_router(router)
+app.include_router(quiz_router)
 
-# Create Audio folder if it doesn't exist
+Base.metadata.create_all(bind=engine)
+
 os.makedirs("Audio", exist_ok=True)
-
-# Serve static files from the Audio folder at the /audio URL path
 app.mount("/audio", StaticFiles(directory="Audio"), name="audio")
 
-# Create Video folder for generated videos
 os.makedirs("video", exist_ok=True)
 app.mount("/video", StaticFiles(directory="video"), name="video")
 

@@ -56,15 +56,33 @@ function App() {
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignUpPage />} />
-      <Route path="/home" element={<HomePage />} />
-      <Route path="/assessment" element={<AssessmentPage />} />
-      <Route path="/history" element={<HistoryPage />} />
-      <Route path="/settings" element={<SettingsPage />} />
-      <Route path="/lesson" element={<LessonPage />} />
-      <Route path="/profile" element={<ProfilePage />} />
+      {/* Protected routes */}
+      <Route path="/home" element={<RequireAuth><HomePage /></RequireAuth>} />
+      <Route path="/assessment" element={<RequireAuth><AssessmentPage /></RequireAuth>} />
+      <Route path="/history" element={<RequireAuth><HistoryPage /></RequireAuth>} />
+      <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
+      <Route path="/lesson" element={<RequireAuth><LessonPage /></RequireAuth>} />
+      <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
+}
+
+function RequireAuth({ children }) {
+  let item = null;
+  try {
+    item = localStorage.getItem('mindspark_user');
+  } catch (e) {
+    item = null;
+  }
+  if (!item) return <Navigate to="/login" replace />;
+  try {
+    const parsed = JSON.parse(item);
+    if (!parsed || !parsed.user_id) return <Navigate to="/login" replace />;
+  } catch (e) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
 }
 
 export default App;

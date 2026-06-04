@@ -19,7 +19,7 @@ function LessonPage() {
   const [error, setError] = useState('');
   const [currentStep, setCurrentStep] = useState(''); // 'script', 'audio', 'video'
 
-  // Auto-start generation if a prompt was passed from HomePage
+  // Auto‑start generation if a prompt was passed from HomePage
   useEffect(() => {
     const statePrompt = location.state?.prompt;
     if (statePrompt && !rawScript && !loading) {
@@ -49,7 +49,7 @@ function LessonPage() {
           });
           const scriptData = await scriptResponse.json();
           if (!scriptResponse.ok) throw new Error(scriptData.detail || 'Script generation failed');
-          
+
           setRawScript(scriptData.script);
           setDisplayScript(scriptData.display_script);
           setLessonId(scriptData.lesson_id);
@@ -69,7 +69,7 @@ function LessonPage() {
           });
           const audioData = await audioResponse.json();
           if (!audioResponse.ok) throw new Error(audioData.detail || 'Audio generation failed');
-          
+
           setAudioUrl(`http://localhost:8000${audioData.audio_url}`);
 
           // Step 3: Generate video
@@ -84,7 +84,7 @@ function LessonPage() {
           });
           const videoData = await videoResponse.json();
           if (!videoResponse.ok) throw new Error(videoData.detail || 'Video generation failed');
-          
+
           setVideoUrl(`http://localhost:8000${videoData.video_url}`);
         } catch (err) {
           setError(err.message);
@@ -96,7 +96,7 @@ function LessonPage() {
     }
   }, [location.state]);
 
-  // Manual generation functions (unchanged)
+  // Manual script generation
   const generateScript = async () => {
     if (!prompt.trim()) {
       alert('Please enter a prompt');
@@ -134,6 +134,7 @@ function LessonPage() {
     }
   };
 
+  // Manual audio generation
   const generateAudio = async () => {
     if (!rawScript || !lessonId) {
       alert('Generate a script first!');
@@ -163,6 +164,7 @@ function LessonPage() {
     }
   };
 
+  // Manual video generation
   const generateVideo = async () => {
     if (!lessonId) {
       alert('No lesson available. Generate a script first.');
@@ -190,31 +192,70 @@ function LessonPage() {
     }
   };
 
+  // Progress bar and quiz generation
   function handleNext() {
     if (progress < 100) {
       setProgress((p) => Math.min(100, p + 20));
     } else {
-      navigate('/assessment');
+      navigate('/assessment', {
+        state: {
+          childId: 1,
+          lessonId: lessonId,
+          topicTitle: prompt || 'Untitled Topic'
+        }
+      });
     }
   }
 
-  // Determine loading message
-  const loadingMessage = currentStep === 'script' ? 'Generating script...' 
-                       : currentStep === 'audio' ? 'Generating audio...' 
-                       : currentStep === 'video' ? 'Generating video...' 
-                       : '';
+  const generateQuiz = async () => {
+    if (!lessonId) {
+      alert('No lesson available. Generate a script first.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const token = localStorage.getItem('mindspark_token');
+      const response = await fetch('http://localhost:8000/generate-quiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ lesson_id: lessonId })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'Failed to generate quiz');
+      // Store quiz in localStorage for the Assessment page
+      localStorage.setItem(`lesson_${lessonId}_quiz`, JSON.stringify(data.quiz));
+      alert('Quiz generated successfully. Open Assessment to view it.');
+      navigate('/assessment', {
+        state: {
+          childId: 1,
+          lessonId: lessonId,
+          topicTitle: prompt || 'Untitled Topic'
+        }
+      });
+    } catch (err) {
+      console.error('Error generating quiz:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadingMessage =
+    currentStep === 'script' ? 'Generating script...'
+    : currentStep === 'audio' ? 'Generating audio...'
+    : currentStep === 'video' ? 'Generating video...'
+    : '';
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-b from-purple-200 to-purple-300 p-6 lg:p-10">
       <div className="mx-auto max-w-4xl bg-white rounded-[28px] p-6 sm:p-8 lg:p-10 shadow-xl">
-        {/* Error display */}
         {error && (
           <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
             {error}
           </div>
         )}
 
-        {/* Integration controls */}
         <div className="mb-6 p-4 border-2 border-purple-300 rounded-xl bg-purple-50">
           <h2 className="text-lg font-bold text-purple-800 mb-3">Generate New Lesson</h2>
           <div className="flex flex-col gap-3">
@@ -262,7 +303,6 @@ function LessonPage() {
           )}
         </div>
 
-        {/* Back button and title */}
         <div className="flex items-center gap-3">
           <button onClick={() => navigate(-1)} className="text-2xl">←</button>
           <h1 className="flex-1 text-center text-2xl sm:text-3xl font-extrabold text-purple-600">
@@ -271,7 +311,6 @@ function LessonPage() {
           <div className="w-6" />
         </div>
 
-        {/* Stage area – prioritises video, then audio, then placeholder */}
         <div className="mt-6 rounded-2xl bg-gray-100 p-10 text-center text-gray-500 font-extrabold">
           {videoUrl ? (
             <video controls src={videoUrl} className="mx-auto w-full max-h-96" />
@@ -288,7 +327,6 @@ function LessonPage() {
           )}
         </div>
 
-        {/* Script display area */}
         <div className="mt-6 rounded-2xl bg-purple-100 p-5 text-purple-800 font-extrabold text-lg leading-relaxed prose prose-purple max-w-none">
           {displayScript ? (
             <ReactMarkdown>{displayScript}</ReactMarkdown>
@@ -297,22 +335,29 @@ function LessonPage() {
           )}
         </div>
 
-        {/* Progress bar */}
         <div className="mt-4 h-2 rounded-full bg-purple-200">
           <div className="h-full rounded-full bg-purple-600" style={{ width: `${progress}%` }}></div>
         </div>
 
-        {/* Next button */}
         <div className="mt-6">
-          <button
-            onClick={handleNext}
-            className="w-full rounded-full bg-purple-600 hover:bg-purple-700 text-white font-extrabold py-4 shadow-lg"
-          >
-            Next ▶
-          </button>
+          {progress >= 100 ? (
+            <button
+              onClick={generateQuiz}
+              disabled={loading || videoLoading}
+              className="w-full rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-4 shadow-lg"
+            >
+              {loading ? 'Generating Quiz...' : 'Generate Quiz'}
+            </button>
+          ) : (
+            <button
+              onClick={handleNext}
+              className="w-full rounded-full bg-purple-600 hover:bg-purple-700 text-white font-extrabold py-4 shadow-lg"
+            >
+              Next ▶
+            </button>
+          )}
         </div>
 
-        {/* Bottom navigation */}
         <nav className="mt-10 grid grid-cols-4 gap-4 text-center text-gray-600">
           <Link to="/home" className="rounded-2xl bg-purple-100 py-3 font-semibold text-purple-700">Home</Link>
           <Link to="/history" className="rounded-2xl bg-gray-100 py-3 font-semibold">History</Link>
