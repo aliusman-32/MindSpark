@@ -22,8 +22,9 @@ from backend.model.ScriptGenerator.podcastPipeline import PodcastPipeline
 from backend.model.AgeClassifier import AgeContentGuard
 from backend.model.VideoGenerator import VideoGenerator
 
-from database import get_db, ContentPrompt, VisualLesson, ChildProfile, User, AssessmentResult
+from database import get_db, ContentPrompt, VisualLesson, ChildProfile, User, AssessmentResult, QuizAttempt
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from script_clean import clean_script_for_display
 
 router = APIRouter()
@@ -134,6 +135,35 @@ class HistoryItem(BaseModel):
     title: str
     subtitle: str
     created_at: datetime
+    lesson_id: Optional[int] = None
+
+class ProfileStatsResponse(BaseModel):
+    child_id: int
+    child_name: str
+    child_age: Optional[int] = None
+    daily_time_limit: Optional[int] = None
+    member_since: Optional[datetime] = None
+    time_spent_today_minutes: float
+    quizzes_completed: int
+    average_score_percentage: float
+
+class ChildProfileUpdateRequest(BaseModel):
+    child_name: Optional[str] = None
+    child_age: Optional[int] = None
+    daily_time_limit: Optional[int] = None
+
+class ChildProfileResponse(BaseModel):
+    child_id: int
+    child_name: str
+    child_age: Optional[int] = None
+    daily_time_limit: Optional[int] = None
+
+class LessonDetailResponse(BaseModel):
+    lesson_id: int
+    title: str
+    script: str
+    display_script: str
+    audio_url: Optional[str] = None
 
 # ------------------- Auth endpoints -------------------
 @router.post("/signup")
@@ -331,14 +361,15 @@ async def get_child_history(child_id: int, db: Session = Depends(get_db)):
         for lesson, prompt in lessons:
             topic = (prompt.prompt_text or lesson.title or "Untitled Topic").strip()
             items.append(HistoryItem(item_type="lesson", title=topic,
-                                     subtitle="Topic learned", created_at=lesson.created_at))
+                                     subtitle="Topic learned", created_at=lesson.created_at,
+                                     lesson_id=lesson.lesson_id))
 
         # Assessments
         assessments = db.query(AssessmentResult).filter(AssessmentResult.child_id == child_id).all()
         for res in assessments:
             items.append(HistoryItem(item_type="assessment", title=res.topic_title,
                                      subtitle=f"Assessment score: {res.score}/{res.total_questions}",
-                                     created_at=res.created_at))
+                                     created_at=res.created_at, lesson_id=res.lesson_id))
 
         items.sort(key=lambda x: x.created_at, reverse=True)
         return items
@@ -346,3 +377,82 @@ async def get_child_history(child_id: int, db: Session = Depends(get_db)):
         raise
     except Exception as e:
         raise HTTPException(500, detail=f"Failed to load history: {str(e)}")
+
+@router.get("/lesson/{lesson_id}", response_model=LessonDetailResponse)
+async def get_lesson(lesson_id: int, db: Session = Depends(get_db)):
+    lesson = db.query(VisualLesson).filter(VisualLesson.lesson_id == lesson_id).first()
+    if not lesson:
+        raise HTTPException(404, "Lesson not found")
+
+    prompt = db.query(ContentPrompt).filter(ContentPrompt.prompt_id == lesson.prompt_id).first()
+    title = (prompt.prompt_text if prompt and prompt.prompt_text else None) or lesson.title or "Untitled Lesson"
+
+    audio_url = f"/audio/{os.path.basename(lesson.narration)}" if lesson.narration else None
+
+    return LessonDetailResponse(
+        lesson_id=lesson.lesson_id,
+        title=title.strip(),
+        script=lesson.description or "",
+        display_script=clean_script_for_display(lesson.description or ""),
+        audio_url=audio_url,
+    )
+
+@router.get("/profile-stats/{child_id}", response_model=ProfileStatsResponse)
+async def get_profile_stats(child_id: int, db: Session = Depends(get_db)):
+    child = db.query(ChildProfile).filter(ChildProfile.child_id == child_id).first()
+    if not child:
+        raise HTTPException(404, "Child profile not found")
+
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_duration_seconds = db.query(func.coalesce(func.sum(VisualLesson.duration_seconds), 0)).join(
+        ContentPrompt, VisualLesson.prompt_id == ContentPrompt.prompt_id
+    ).filter(
+        ContentPrompt.child_id == child_id,
+        VisualLesson.created_at >= today_start,
+    ).scalar()
+
+    quizzes_completed, avg_score = db.query(
+        func.count(QuizAttempt.attempt_id),
+        func.coalesce(func.avg(QuizAttempt.percentage), 0),
+    ).filter(QuizAttempt.child_id == child_id).first()
+
+    return ProfileStatsResponse(
+        child_id=child.child_id,
+        child_name=child.child_name or "Learner",
+        child_age=child.child_age,
+        daily_time_limit=child.daily_time_limit,
+        member_since=child.created_at,
+        time_spent_today_minutes=round((today_duration_seconds or 0) / 60, 1),
+        quizzes_completed=quizzes_completed or 0,
+        average_score_percentage=round(float(avg_score or 0), 1),
+    )
+
+@router.patch("/child-profile/{child_id}", response_model=ChildProfileResponse)
+async def update_child_profile(child_id: int, request: ChildProfileUpdateRequest, db: Session = Depends(get_db)):
+    child = db.query(ChildProfile).filter(ChildProfile.child_id == child_id).first()
+    if not child:
+        raise HTTPException(404, "Child profile not found")
+
+    if request.child_name is not None:
+        name = request.child_name.strip()
+        if not name:
+            raise HTTPException(400, "child_name cannot be empty")
+        child.child_name = name
+    if request.child_age is not None:
+        if request.child_age < 0 or request.child_age > 18:
+            raise HTTPException(400, "child_age must be between 0 and 18")
+        child.child_age = request.child_age
+    if request.daily_time_limit is not None:
+        if request.daily_time_limit < 0:
+            raise HTTPException(400, "daily_time_limit cannot be negative")
+        child.daily_time_limit = request.daily_time_limit
+
+    db.commit()
+    db.refresh(child)
+
+    return ChildProfileResponse(
+        child_id=child.child_id,
+        child_name=child.child_name or "Learner",
+        child_age=child.child_age,
+        daily_time_limit=child.daily_time_limit,
+    )

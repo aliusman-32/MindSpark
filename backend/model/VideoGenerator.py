@@ -3,7 +3,7 @@ import requests
 import base64
 import time
 from PIL import Image, ImageDraw, ImageFont
-from moviepy.editor import ImageClip, concatenate_videoclips, AudioFileClip
+from moviepy import ImageClip, concatenate_videoclips, AudioFileClip
 from pydub import AudioSegment
 from io import BytesIO
 from dotenv import load_dotenv
@@ -235,7 +235,7 @@ class VideoGenerator:
                 if frame_index >= len(self.image_paths):
                     break
                 img_path = self.image_paths[frame_index]
-                clips.append(ImageClip(img_path).set_duration(frame_duration))
+                clips.append(ImageClip(img_path).with_duration(frame_duration))
                 frame_index += 1
 
         if not clips:
@@ -246,7 +246,7 @@ class VideoGenerator:
 
         # Add audio
         audio_clip = AudioFileClip(self.audio_path)
-        video = video.set_audio(audio_clip)
+        video = video.with_audio(audio_clip)
 
         # Export
         video.write_videofile(

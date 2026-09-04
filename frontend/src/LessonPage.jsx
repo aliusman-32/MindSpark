@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
+import SparkleBackground from './SparkleBackground';
+import { useModal } from './Modal';
 
 function LessonPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const modal = useModal();
   const [progress, setProgress] = useState(20);
 
   // State for integration
@@ -18,10 +21,39 @@ function LessonPage() {
   const [videoLoading, setVideoLoading] = useState(false);
   const [error, setError] = useState('');
   const [currentStep, setCurrentStep] = useState(''); // 'script', 'audio', 'video'
+  const [viewLoading, setViewLoading] = useState(false);
+
+  // Load a previously-generated lesson (from History "play") instead of generating a new one
+  useEffect(() => {
+    const viewLessonId = location.state?.viewLessonId;
+    if (!viewLessonId) return;
+
+    (async () => {
+      setViewLoading(true);
+      setError('');
+      try {
+        const response = await fetch(`http://localhost:8000/lesson/${viewLessonId}`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'Failed to load lesson');
+
+        setPrompt(data.title);
+        setRawScript(data.script);
+        setDisplayScript(data.display_script);
+        setLessonId(data.lesson_id);
+        setAudioUrl(data.audio_url ? `http://localhost:8000${data.audio_url}` : '');
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setViewLoading(false);
+      }
+    })();
+  }, [location.state]);
 
   // Auto‑start generation if a prompt was passed from HomePage
   useEffect(() => {
+    if (location.state?.viewLessonId) return; // viewing an existing lesson, don't auto-generate
     const statePrompt = location.state?.prompt;
+    const stateCategoryId = location.state?.category_id ?? 1;
     if (statePrompt && !rawScript && !loading) {
       setPrompt(statePrompt);
       // Automatically trigger the full generation pipeline
@@ -43,7 +75,7 @@ function LessonPage() {
                 { title: 'Conclusion', allocated_duration_minutes: 1.0 }
               ],
               target_duration_minutes: 5.0,
-              category_id: 1,
+              category_id: stateCategoryId,
               difficulty_level: 'beginner'
             })
           });
@@ -99,7 +131,7 @@ function LessonPage() {
   // Manual script generation
   const generateScript = async () => {
     if (!prompt.trim()) {
-      alert('Please enter a prompt');
+      await modal.alert('Please enter a prompt');
       return;
     }
     setLoading(true);
@@ -137,7 +169,7 @@ function LessonPage() {
   // Manual audio generation
   const generateAudio = async () => {
     if (!rawScript || !lessonId) {
-      alert('Generate a script first!');
+      await modal.alert('Generate a script first!');
       return;
     }
     setLoading(true);
@@ -167,7 +199,7 @@ function LessonPage() {
   // Manual video generation
   const generateVideo = async () => {
     if (!lessonId) {
-      alert('No lesson available. Generate a script first.');
+      await modal.alert('No lesson available. Generate a script first.');
       return;
     }
     setVideoLoading(true);
@@ -209,7 +241,7 @@ function LessonPage() {
 
   const generateQuiz = async () => {
     if (!lessonId) {
-      alert('No lesson available. Generate a script first.');
+      await modal.alert('No lesson available. Generate a script first.');
       return;
     }
     setLoading(true);
@@ -225,7 +257,7 @@ function LessonPage() {
       if (!response.ok) throw new Error(data.detail || 'Failed to generate quiz');
       // Store quiz in localStorage for the Assessment page
       localStorage.setItem(`lesson_${lessonId}_quiz`, JSON.stringify(data.quiz));
-      alert('Quiz generated successfully. Open Assessment to view it.');
+      await modal.alert('Quiz generated successfully. Open Assessment to view it.');
       navigate('/assessment', {
         state: {
           childId: 1,
@@ -242,14 +274,16 @@ function LessonPage() {
   };
 
   const loadingMessage =
-    currentStep === 'script' ? 'Generating script...'
+    viewLoading ? 'Loading lesson...'
+    : currentStep === 'script' ? 'Generating script...'
     : currentStep === 'audio' ? 'Generating audio...'
     : currentStep === 'video' ? 'Generating video...'
     : '';
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-b from-purple-200 to-purple-300 p-6 lg:p-10">
-      <div className="mx-auto max-w-4xl bg-white rounded-[28px] p-6 sm:p-8 lg:p-10 shadow-xl">
+    <div className="relative min-h-screen w-full bg-gradient-to-b from-purple-200 to-purple-300 p-6 lg:p-10">
+      <SparkleBackground />
+      <div className="relative z-10 mx-auto max-w-4xl bg-white rounded-[28px] p-6 sm:p-8 lg:p-10 shadow-xl">
         {error && (
           <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
             {error}

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import SparkleBackground from './SparkleBackground';
 
 function Notice({ type, message }) {
   if (!message) return null;
@@ -60,8 +61,9 @@ function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-violet-100 p-6 lg:p-10">
-      <div className="w-full max-w-xl sm:max-w-2xl lg:max-w-4xl bg-white rounded-3xl shadow-xl px-6 sm:px-10 lg:px-16 py-10 lg:py-12">
+    <div className="relative min-h-screen w-full flex items-center justify-center bg-violet-100 p-6 lg:p-10">
+      <SparkleBackground />
+      <div className="relative z-10 w-full max-w-xl sm:max-w-2xl lg:max-w-4xl bg-white rounded-3xl shadow-xl px-6 sm:px-10 lg:px-16 py-10 lg:py-12">
         <div className="text-center mb-8">
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-purple-600 tracking-tight">MindSpark</h1>
           <p className="mt-3 text-gray-600 font-medium text-base lg:text-lg">Welcome back! Log in to continue.</p>

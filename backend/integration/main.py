@@ -1,3 +1,12 @@
+import sys
+import io
+
+# Force UTF-8 stdio so emoji log statements don't crash on Windows' default cp1252 console
+if hasattr(sys.stdout, "buffer"):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "buffer"):
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -14,6 +23,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
+    allow_origin_regex=r"http://localhost:\d+",
     allow_origins=["http://localhost:3000", "http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],

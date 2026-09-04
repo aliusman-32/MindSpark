@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import SparkleBackground from './SparkleBackground';
 
 function AssessmentPage() {
   const location = useLocation();
@@ -92,8 +93,9 @@ function AssessmentPage() {
   if (!questions.length) return <div className="p-10 text-center">No quiz available. Go back and generate one.</div>;
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-b from-purple-200 to-purple-300 p-6 lg:p-10">
-      <div className="mx-auto max-w-4xl bg-white rounded-3xl p-6 sm:p-8 lg:p-10 shadow-xl">
+    <div className="relative min-h-screen w-full bg-gradient-to-b from-purple-200 to-purple-300 p-6 lg:p-10">
+      <SparkleBackground />
+      <div className="relative z-10 mx-auto max-w-4xl bg-white rounded-3xl p-6 sm:p-8 lg:p-10 shadow-xl">
         <h1 className="text-center text-3xl sm:text-4xl font-extrabold text-purple-600">Quiz Time! ✏️</h1>
 
         {!completed ? (

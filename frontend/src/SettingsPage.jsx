@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import SparkleBackground from './SparkleBackground';
 
-function Row({ icon, title, subtitle, trailing, href }) {
+function Row({ icon, title, subtitle, trailing }) {
   return (
     <div className="bg-gray-100 rounded-2xl px-5 py-4 flex items-center justify-between">
       <div className="flex items-center gap-4">
@@ -11,11 +12,7 @@ function Row({ icon, title, subtitle, trailing, href }) {
           {subtitle ? <div className="text-sm text-gray-600 font-semibold">{subtitle}</div> : null}
         </div>
       </div>
-      <div>
-        {trailing ?? (
-          href ? <a href={href} className="text-gray-400">↗</a> : <span className="text-gray-400">↗</span>
-        )}
-      </div>
+      <div>{trailing ?? <span className="text-gray-400">↗</span>}</div>
     </div>
   );
 }
@@ -33,7 +30,13 @@ function Toggle({ checked, onChange }) {
 
 function SettingsPage() {
   const navigate = useNavigate();
-  const [notifications, setNotifications] = useState(false);
+  const [notifications, setNotifications] = useState(() => {
+    try {
+      return localStorage.getItem('mindspark_notifications') === 'true';
+    } catch (e) {
+      return false;
+    }
+  });
   const [displayName, setDisplayName] = useState('Guest');
 
   React.useEffect(() => {
@@ -52,6 +55,13 @@ function SettingsPage() {
     }
   }, []);
 
+  const handleNotificationsChange = (value) => {
+    setNotifications(value);
+    try {
+      localStorage.setItem('mindspark_notifications', String(value));
+    } catch (e) {}
+  };
+
   const handleLogout = () => {
     try {
       localStorage.removeItem('mindspark_user');
@@ -61,8 +71,9 @@ function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-b from-purple-200 to-purple-300 p-6 lg:p-10">
-      <div className="mx-auto max-w-5xl bg-white rounded-[28px] p-6 sm:p-8 lg:p-10 shadow-xl">
+    <div className="relative min-h-screen w-full bg-gradient-to-b from-purple-200 to-purple-300 p-6 lg:p-10">
+      <SparkleBackground />
+      <div className="relative z-10 mx-auto max-w-5xl bg-white rounded-[28px] p-6 sm:p-8 lg:p-10 shadow-xl">
         <h1 className="text-center text-3xl sm:text-4xl font-extrabold text-purple-600">Settings ⚙️</h1>
 
         <div className="mt-6 rounded-3xl bg-purple-50 border border-purple-100 px-5 py-4 text-center">
@@ -72,16 +83,18 @@ function SettingsPage() {
 
         <div className="mt-8 space-y-4">
           <Link to="/profile">
-            <Row icon="👤" title="Profile" subtitle="Aliza, 7 years old" href="/profile" />
+            <Row icon="👤" title="Profile" subtitle="Aliza, 7 years old" />
           </Link>
-          <Row icon="🗂️" title="Saved Data" subtitle="Manage learning history & quizzes" />
+          <Link to="/history">
+            <Row icon="🗂️" title="Saved Data" subtitle="Manage learning history & quizzes" />
+          </Link>
           <Row
             icon="🔔"
             title="Notifications"
             subtitle="Enable/disable app alerts"
-            trailing={<Toggle checked={notifications} onChange={setNotifications} />}
+            trailing={<Toggle checked={notifications} onChange={handleNotificationsChange} />}
           />
-          <Row icon="🌞" title="Theme/Background" subtitle="Change the look of the app" />
+          <Row icon="🌞" title="Theme/Background" subtitle="Coming soon" />
         </div>
 
         <div className="mt-8">
