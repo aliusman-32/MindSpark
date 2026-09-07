@@ -48,6 +48,14 @@ import HistoryPage from './HistoryPage';
 import SettingsPage from './SettingsPage';
 import LessonPage from './LessonPage';
 import ProfilePage from './ProfilePage';
+import FunFactPage from './FunFactPage';
+import GamesHubPage from './GamesHubPage';
+import TicTacToePage from './TicTacToePage';
+import MemoryMatchPage from './MemoryMatchPage';
+import HangmanPage from './HangmanPage';
+import RockPaperScissorsPage from './RockPaperScissorsPage';
+import SimonSaysPage from './SimonSaysPage';
+import { getStoredUser } from './authStorage';
 
 
 function App() {
@@ -63,25 +71,21 @@ function App() {
       <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
       <Route path="/lesson" element={<RequireAuth><LessonPage /></RequireAuth>} />
       <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
+      <Route path="/fun-facts" element={<RequireAuth><FunFactPage /></RequireAuth>} />
+      <Route path="/games" element={<RequireAuth><GamesHubPage /></RequireAuth>} />
+      <Route path="/games/tic-tac-toe" element={<RequireAuth><TicTacToePage /></RequireAuth>} />
+      <Route path="/games/memory-match" element={<RequireAuth><MemoryMatchPage /></RequireAuth>} />
+      <Route path="/games/hangman" element={<RequireAuth><HangmanPage /></RequireAuth>} />
+      <Route path="/games/rock-paper-scissors" element={<RequireAuth><RockPaperScissorsPage /></RequireAuth>} />
+      <Route path="/games/simon-says" element={<RequireAuth><SimonSaysPage /></RequireAuth>} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
 }
 
 function RequireAuth({ children }) {
-  let item = null;
-  try {
-    item = localStorage.getItem('mindspark_user');
-  } catch (e) {
-    item = null;
-  }
-  if (!item) return <Navigate to="/login" replace />;
-  try {
-    const parsed = JSON.parse(item);
-    if (!parsed || !parsed.user_id) return <Navigate to="/login" replace />;
-  } catch (e) {
-    return <Navigate to="/login" replace />;
-  }
+  const user = getStoredUser();
+  if (!user || !user.user_id) return <Navigate to="/login" replace />;
   return children;
 }
 

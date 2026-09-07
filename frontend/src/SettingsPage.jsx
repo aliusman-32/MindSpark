@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import SparkleBackground from './SparkleBackground';
+import PageShell from './PageShell';
+import AppHeader from './AppHeader';
+import BottomNav from './BottomNav';
+import { getStoredUser, clearSession } from './authStorage';
+import { useTheme } from './ThemeContext';
 
 function Row({ icon, title, subtitle, trailing }) {
   return (
@@ -17,10 +21,13 @@ function Row({ icon, title, subtitle, trailing }) {
   );
 }
 
-function Toggle({ checked, onChange }) {
+function Toggle({ checked, onChange, label }) {
   return (
     <button
       onClick={() => onChange(!checked)}
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
       className={`w-14 h-8 rounded-full p-1 transition-colors ${checked ? 'bg-purple-600' : 'bg-gray-300'}`}
     >
       <div className={`w-6 h-6 bg-white rounded-full transition-transform ${checked ? 'translate-x-6' : ''}`}></div>
@@ -30,6 +37,7 @@ function Toggle({ checked, onChange }) {
 
 function SettingsPage() {
   const navigate = useNavigate();
+  const { themeKey, setThemeKey, themes } = useTheme();
   const [notifications, setNotifications] = useState(() => {
     try {
       return localStorage.getItem('mindspark_notifications') === 'true';
@@ -40,18 +48,16 @@ function SettingsPage() {
   const [displayName, setDisplayName] = useState('Guest');
 
   React.useEffect(() => {
-    try {
-      const item = localStorage.getItem('mindspark_user');
-      if (!item) return;
-      const parsed = JSON.parse(item);
-      if (parsed?.fullName) {
-        setDisplayName(parsed.fullName);
-      } else if (parsed?.email) {
-        const namePart = parsed.email.split('@')[0];
-        setDisplayName(namePart.charAt(0).toUpperCase() + namePart.slice(1));
-      }
-    } catch (e) {
+    const parsed = getStoredUser();
+    if (!parsed) {
       setDisplayName('Guest');
+      return;
+    }
+    if (parsed.fullName) {
+      setDisplayName(parsed.fullName);
+    } else if (parsed.email) {
+      const namePart = parsed.email.split('@')[0];
+      setDisplayName(namePart.charAt(0).toUpperCase() + namePart.slice(1));
     }
   }, []);
 
@@ -63,17 +69,13 @@ function SettingsPage() {
   };
 
   const handleLogout = () => {
-    try {
-      localStorage.removeItem('mindspark_user');
-      localStorage.removeItem('mindspark_token');
-    } catch (e) {}
+    clearSession();
     navigate('/login', { replace: true });
   };
 
   return (
-    <div className="relative min-h-screen w-full bg-gradient-to-b from-purple-200 to-purple-300 p-6 lg:p-10">
-      <SparkleBackground />
-      <div className="relative z-10 mx-auto max-w-5xl bg-white rounded-[28px] p-6 sm:p-8 lg:p-10 shadow-xl">
+    <PageShell maxWidth="max-w-5xl">
+        <AppHeader />
         <h1 className="text-center text-3xl sm:text-4xl font-extrabold text-purple-600">Settings ⚙️</h1>
 
         <div className="mt-6 rounded-3xl bg-purple-50 border border-purple-100 px-5 py-4 text-center">
@@ -92,9 +94,32 @@ function SettingsPage() {
             icon="🔔"
             title="Notifications"
             subtitle="Enable/disable app alerts"
-            trailing={<Toggle checked={notifications} onChange={handleNotificationsChange} />}
+            trailing={<Toggle checked={notifications} onChange={handleNotificationsChange} label="Enable notifications" />}
           />
-          <Row icon="🌞" title="Theme/Background" subtitle="Coming soon" />
+          <div className="bg-gray-100 rounded-2xl px-5 py-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-white/70 flex items-center justify-center text-2xl">🌞</div>
+              <div>
+                <div className="text-lg font-extrabold text-gray-900">Theme/Background</div>
+                <div className="text-sm text-gray-600 font-semibold">Choose a color theme</div>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-3 pl-16">
+              {Object.entries(themes).map(([key, t]) => (
+                <button
+                  key={key}
+                  onClick={() => setThemeKey(key)}
+                  aria-label={`${t.label} theme`}
+                  aria-pressed={themeKey === key}
+                  title={t.label}
+                  className={`w-10 h-10 rounded-full border-4 transition-all hover:scale-110 ${
+                    themeKey === key ? 'border-purple-600 scale-110 shadow-md' : 'border-white shadow-sm'
+                  }`}
+                  style={{ background: t.swatch }}
+                />
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="mt-8">
@@ -106,14 +131,8 @@ function SettingsPage() {
           </button>
         </div>
 
-        <nav className="mt-10 grid grid-cols-4 gap-4 text-center text-gray-600">
-          <Link to="/home" className="rounded-2xl bg-gray-100 py-3 font-semibold">Home</Link>
-          <Link to="/history" className="rounded-2xl bg-gray-100 py-3 font-semibold">History</Link>
-          <Link to="/assessment" className="rounded-2xl bg-gray-100 py-3 font-semibold">Assessment</Link>
-          <Link to="/settings" className="rounded-2xl bg-purple-100 py-3 font-semibold text-purple-700">Settings</Link>
-        </nav>
-      </div>
-    </div>
+        <BottomNav />
+    </PageShell>
   );
 }
 

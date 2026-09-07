@@ -246,7 +246,7 @@ class VideoGenerator:
 
         # Add audio
         audio_clip = AudioFileClip(self.audio_path)
-        video = video.with_audio(audio_clip)
+        video = video.set_audio(audio_clip)
 
         # Export
         video.write_videofile(

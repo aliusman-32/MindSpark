@@ -1,8 +1,47 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
-import SparkleBackground from './SparkleBackground';
+import PageShell from './PageShell';
+import AppHeader from './AppHeader';
+import BottomNav from './BottomNav';
 import { useModal } from './Modal';
+import { getStoredToken } from './authStorage';
+
+const GENERATION_STEPS = [
+  { key: 'script', label: 'Script' },
+  { key: 'audio', label: 'Audio' },
+  { key: 'video', label: 'Video' },
+];
+
+function GenerationSteps({ currentStep, hasScript, hasAudio, hasVideo }) {
+  const doneMap = { script: hasScript, audio: hasAudio, video: hasVideo };
+  return (
+    <div className="mt-4 flex items-center justify-center gap-2">
+      {GENERATION_STEPS.map((step, i) => {
+        const isActive = currentStep === step.key;
+        const isDone = doneMap[step.key];
+        const prevDone = i === 0 || doneMap[GENERATION_STEPS[i - 1].key];
+        return (
+          <React.Fragment key={step.key}>
+            {i > 0 && (
+              <div className={`h-1 w-10 rounded transition-colors ${prevDone ? 'bg-purple-400' : 'bg-gray-200'}`} />
+            )}
+            <div className="flex flex-col items-center gap-1">
+              <div
+                className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
+                  isDone ? 'bg-green-500 text-white' : isActive ? 'bg-purple-600 text-white animate-pulse' : 'bg-gray-200 text-gray-500'
+                }`}
+              >
+                {isDone ? '✓' : i + 1}
+              </div>
+              <span className={`text-xs font-semibold ${isActive ? 'text-purple-700' : 'text-gray-500'}`}>{step.label}</span>
+            </div>
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
 
 function LessonPage() {
   const navigate = useNavigate();
@@ -22,11 +61,15 @@ function LessonPage() {
   const [error, setError] = useState('');
   const [currentStep, setCurrentStep] = useState(''); // 'script', 'audio', 'video'
   const [viewLoading, setViewLoading] = useState(false);
+  const viewedLessonKeyRef = useRef(null);
+  const autoGenKeyRef = useRef(null);
 
   // Load a previously-generated lesson (from History "play") instead of generating a new one
   useEffect(() => {
     const viewLessonId = location.state?.viewLessonId;
     if (!viewLessonId) return;
+    if (viewedLessonKeyRef.current === viewLessonId) return; // StrictMode double-invoke guard
+    viewedLessonKeyRef.current = viewLessonId;
 
     (async () => {
       setViewLoading(true);
@@ -54,10 +97,17 @@ function LessonPage() {
     if (location.state?.viewLessonId) return; // viewing an existing lesson, don't auto-generate
     const statePrompt = location.state?.prompt;
     const stateCategoryId = location.state?.category_id ?? 1;
-    if (statePrompt && !rawScript && !loading) {
-      setPrompt(statePrompt);
-      // Automatically trigger the full generation pipeline
-      (async () => {
+    if (!statePrompt) return;
+
+    // Guard against React StrictMode's dev-only double-invoke of effects, which
+    // would otherwise fire this (paid, non-idempotent) generation twice per visit.
+    const key = `${statePrompt}::${stateCategoryId}`;
+    if (autoGenKeyRef.current === key) return;
+    autoGenKeyRef.current = key;
+
+    setPrompt(statePrompt);
+    // Automatically trigger the full generation pipeline
+    (async () => {
         setLoading(true);
         setError('');
         try {
@@ -125,7 +175,6 @@ function LessonPage() {
           setCurrentStep('');
         }
       })();
-    }
   }, [location.state]);
 
   // Manual script generation
@@ -247,7 +296,7 @@ function LessonPage() {
     setLoading(true);
     setError('');
     try {
-      const token = localStorage.getItem('mindspark_token');
+      const token = getStoredToken();
       const response = await fetch('http://localhost:8000/generate-quiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -281,9 +330,8 @@ function LessonPage() {
     : '';
 
   return (
-    <div className="relative min-h-screen w-full bg-gradient-to-b from-purple-200 to-purple-300 p-6 lg:p-10">
-      <SparkleBackground />
-      <div className="relative z-10 mx-auto max-w-4xl bg-white rounded-[28px] p-6 sm:p-8 lg:p-10 shadow-xl">
+    <PageShell maxWidth="max-w-4xl">
+        <AppHeader />
         {error && (
           <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
             {error}
@@ -298,6 +346,7 @@ function LessonPage() {
               placeholder="Enter a topic (e.g., 'The Solar System')"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !loading && !videoLoading && generateScript()}
               className="w-full p-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-black placeholder-gray-500"
             />
             <div className="flex gap-3">
@@ -330,19 +379,35 @@ function LessonPage() {
               </div>
             )}
           </div>
-          {loadingMessage && (
-            <div className="mt-3 text-purple-600 font-semibold animate-pulse">
-              {loadingMessage}
-            </div>
+          {(loading || viewLoading) && (
+            <>
+              <GenerationSteps
+                currentStep={viewLoading ? 'script' : currentStep}
+                hasScript={!!rawScript}
+                hasAudio={!!audioUrl}
+                hasVideo={!!videoUrl}
+              />
+              {loadingMessage && (
+                <div className="mt-2 text-center text-purple-600 font-semibold text-sm animate-pulse">
+                  {loadingMessage}
+                </div>
+              )}
+            </>
           )}
         </div>
 
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="text-2xl">←</button>
+          <button
+            onClick={() => navigate(-1)}
+            aria-label="Go back"
+            className="shrink-0 w-11 h-11 rounded-full bg-white shadow-md border border-purple-100 hover:bg-purple-50 active:scale-95 flex items-center justify-center text-2xl text-purple-600 transition"
+          >
+            ←
+          </button>
           <h1 className="flex-1 text-center text-2xl sm:text-3xl font-extrabold text-purple-600">
-            {displayScript ? prompt : 'The Thirsty Crow'}
+            {displayScript ? prompt : 'New Lesson'}
           </h1>
-          <div className="w-6" />
+          <div className="w-11 shrink-0" />
         </div>
 
         <div className="mt-6 rounded-2xl bg-gray-100 p-10 text-center text-gray-500 font-extrabold">
@@ -352,11 +417,9 @@ function LessonPage() {
             <audio controls src={audioUrl} className="mx-auto" />
           ) : (
             <>
-              <div>This is the "stage" for graphics, videos,</div>
-              <div>or animations.</div>
-              <div className="mt-6 mx-auto w-32 h-32 rounded-full border-[10px] border-rose-300 flex items-center justify-center text-3xl text-gray-400">
-                PLAY
-              </div>
+              <div className="text-5xl mb-3">🎬</div>
+              <div className="text-gray-600 font-semibold">Your audio and video will appear here</div>
+              <div className="text-gray-400 text-sm font-medium mt-1">once your lesson is generated</div>
             </>
           )}
         </div>
@@ -365,7 +428,9 @@ function LessonPage() {
           {displayScript ? (
             <ReactMarkdown>{displayScript}</ReactMarkdown>
           ) : (
-            'Once upon a time, a clever crow was looking for some water on a very hot day. He found a jar, but the water was too far down to reach...'
+            <span className="text-purple-400 font-semibold">
+              Type a topic above and hit "Generate Script" — your lesson will appear here! ✨
+            </span>
           )}
         </div>
 
@@ -392,14 +457,8 @@ function LessonPage() {
           )}
         </div>
 
-        <nav className="mt-10 grid grid-cols-4 gap-4 text-center text-gray-600">
-          <Link to="/home" className="rounded-2xl bg-purple-100 py-3 font-semibold text-purple-700">Home</Link>
-          <Link to="/history" className="rounded-2xl bg-gray-100 py-3 font-semibold">History</Link>
-          <Link to="/assessment" className="rounded-2xl bg-gray-100 py-3 font-semibold">Assessment</Link>
-          <Link to="/settings" className="rounded-2xl bg-gray-100 py-3 font-semibold">Settings</Link>
-        </nav>
-      </div>
-    </div>
+        <BottomNav />
+    </PageShell>
   );
 }
 

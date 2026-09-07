@@ -23,7 +23,7 @@ class ChunkFactExtractor:
     def __init__(self, temperature: float = 0.2):
         # Use Groq for fast fact extraction
         self.client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-        self.model = "llama-3.1-8b-instant"  # Use fastest model for bulk processing
+        self.model = "openai/gpt-oss-20b"  # Fast model for bulk processing (llama-3.1-8b-instant was retired by Groq)
 
     def process_chunk(self, doc: Document) -> List[Dict[str, Any]]:
         meta = doc.metadata or {}

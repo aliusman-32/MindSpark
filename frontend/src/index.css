@@ -115,3 +115,124 @@ button {
     transform: scale(1);
   }
 }
+
+.animate-page-fade {
+  animation: page-fade 0.25s ease-out;
+}
+
+@keyframes page-fade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.confetti-piece {
+  position: absolute;
+  top: -10px;
+  width: 8px;
+  height: 14px;
+  opacity: 0.95;
+  animation-name: confetti-fall;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  animation-fill-mode: forwards;
+}
+
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(0) translateX(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(420px) translateX(var(--drift)) rotate(var(--rotate));
+    opacity: 0;
+  }
+}
+
+.animate-float {
+  animation: float 3.5s ease-in-out infinite;
+  display: inline-block;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0) rotate(-3deg);
+  }
+  50% {
+    transform: translateY(-14px) rotate(3deg);
+  }
+}
+
+.animate-fact-fade {
+  animation: fact-fade 0.4s ease-out;
+}
+
+@keyframes fact-fade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-page-fade,
+  .confetti-piece,
+  .animate-float,
+  .animate-fact-fade {
+    animation: none;
+  }
+}
+
+.auth-card-glow {
+  position: relative;
+  border-radius: 1.5rem;
+  border: 3px solid transparent;
+  background:
+    linear-gradient(white, white) padding-box,
+    linear-gradient(120deg, #a855f7, #ec4899, #fb923c, #a855f7) border-box;
+  background-size: 100% 100%, 300% 300%;
+  animation: auth-border-shift 6s ease infinite;
+}
+
+@keyframes auth-border-shift {
+  0%, 100% {
+    background-position: 0% 0%, 0% 50%;
+  }
+  50% {
+    background-position: 0% 0%, 100% 50%;
+  }
+}
+
+.animate-stagger {
+  opacity: 0;
+  animation: stagger-fade 0.45s ease-out forwards;
+}
+
+@keyframes stagger-fade {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-card-glow {
+    animation: none;
+  }
+  .animate-stagger {
+    animation: none;
+    opacity: 1;
+  }
+}

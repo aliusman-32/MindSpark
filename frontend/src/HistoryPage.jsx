@@ -1,6 +1,9 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import SparkleBackground from './SparkleBackground';
+import { useNavigate } from 'react-router-dom';
+import PageShell from './PageShell';
+import AppHeader from './AppHeader';
+import BottomNav from './BottomNav';
+import Skeleton from './Skeleton';
 import { useModal } from './Modal';
 
 function HistoryPage() {
@@ -53,9 +56,8 @@ function HistoryPage() {
   };
 
   return (
-    <div className="relative min-h-screen w-full bg-gradient-to-b from-purple-200 to-purple-300 p-6 lg:p-10">
-      <SparkleBackground />
-      <div className="relative z-10 mx-auto max-w-5xl bg-white rounded-3xl p-6 sm:p-8 lg:p-10 shadow-xl">
+    <PageShell maxWidth="max-w-5xl" rounded="rounded-3xl">
+        <AppHeader />
         <h1 className="text-center text-3xl sm:text-4xl font-extrabold text-purple-600">My Learning History</h1>
 
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
@@ -75,7 +77,13 @@ function HistoryPage() {
         </div>
 
         <div className="mt-6 space-y-5">
-          {loading && <div className="text-center text-purple-700">Loading history...</div>}
+          {loading && (
+            <>
+              <Skeleton className="h-24" />
+              <Skeleton className="h-24" />
+              <Skeleton className="h-24" />
+            </>
+          )}
           {error && <div className="text-center text-red-600">{error}</div>}
           {!loading && !error && sorted.length === 0 && (
             <div className="text-center text-gray-600">
@@ -103,6 +111,7 @@ function HistoryPage() {
               <button
                 onClick={() => handlePlay(item)}
                 disabled={!item.lesson_id}
+                aria-label={`Play ${item.title}`}
                 className="w-12 h-12 rounded-full bg-gradient-to-r from-pink-500 to-purple-500 text-white text-lg font-bold shadow-md disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110 active:scale-95 transition"
               >
                 ▶
@@ -111,14 +120,8 @@ function HistoryPage() {
           ))}
         </div>
 
-        <nav className="mt-10 grid grid-cols-4 gap-4 text-center text-gray-600">
-          <Link to="/home" className="rounded-2xl bg-gray-100 py-3 font-semibold">Home</Link>
-          <Link to="/history" className="rounded-2xl bg-purple-100 py-3 font-semibold text-purple-700">History</Link>
-          <Link to="/assessment" className="rounded-2xl bg-gray-100 py-3 font-semibold">Assessment</Link>
-          <Link to="/settings" className="rounded-2xl bg-gray-100 py-3 font-semibold">Settings</Link>
-        </nav>
-      </div>
-    </div>
+        <BottomNav />
+    </PageShell>
   );
 }
 

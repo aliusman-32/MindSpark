@@ -10,7 +10,7 @@ class ChapterAgent:
     def __init__(self):
         # Use Groq for chapter organization (fast processing)
         self.client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-        self.model = "llama-3.3-70b-versatile"  # Use 70B for better reasoning
+        self.model = "openai/gpt-oss-120b"  # Larger model for better reasoning (llama-3.3-70b-versatile was retired by Groq)
 
     def process(self, facts: list[dict], target_duration_minutes: float):
         try:
@@ -24,7 +24,7 @@ class ChapterAgent:
             
             prompt = self._create_prompt(fact_texts, target_duration_minutes)
             
-            print(f"📋 Creating chapters with Groq (Llama 3.1 70B)...")
+            print(f"📋 Creating chapters with Groq ({self.model})...")
             
             # Call Groq API
             response = self.client.chat.completions.create(

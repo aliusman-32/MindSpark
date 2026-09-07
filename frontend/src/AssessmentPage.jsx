@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import SparkleBackground from './SparkleBackground';
+import PageShell from './PageShell';
+import AppHeader from './AppHeader';
+import BottomNav from './BottomNav';
+import Confetti from './Confetti';
 
 function AssessmentPage() {
   const location = useLocation();
@@ -24,19 +27,24 @@ function AssessmentPage() {
       try {
         const quiz = JSON.parse(stored);
         if (quiz.questions && Array.isArray(quiz.questions)) {
-          // Convert to internal format
-          const converted = quiz.questions.map((q, idx) => ({
-            id: idx,
-            text: q.question,
-            options: (() => {
-              const opts = [{ id: 'a', label: q.correct_answer, color: 'bg-green-400' }];
-              (q.wrong_options || []).slice(0,3).forEach((w, i) => {
-                opts.push({ id: String.fromCharCode(98+i), label: w, color: 'bg-red-400' });
-              });
-              return opts;
-            })(),
-            correct: 'a'
-          }));
+          // Convert to internal format, with answer options shuffled so the
+          // correct answer isn't always first / always a giveaway color.
+          const converted = quiz.questions.map((q, idx) => {
+            const options = [
+              { id: 'correct', label: q.correct_answer },
+              ...(q.wrong_options || []).slice(0, 3).map((w, i) => ({ id: `wrong${i}`, label: w })),
+            ];
+            for (let i = options.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [options[i], options[j]] = [options[j], options[i]];
+            }
+            return {
+              id: idx,
+              text: q.question,
+              options,
+              correct: 'correct',
+            };
+          });
           setQuestions(converted);
         }
       } catch (e) {
@@ -89,13 +97,21 @@ function AssessmentPage() {
     }
   }
 
-  if (loading) return <div className="p-10 text-center">Loading quiz...</div>;
-  if (!questions.length) return <div className="p-10 text-center">No quiz available. Go back and generate one.</div>;
+  if (loading || !questions.length) {
+    return (
+      <PageShell maxWidth="max-w-4xl" rounded="rounded-3xl">
+          <AppHeader />
+          <div className="py-16 text-center text-gray-600 font-semibold">
+            {loading ? 'Loading quiz...' : 'No quiz available. Go back and generate one.'}
+          </div>
+          <BottomNav />
+      </PageShell>
+    );
+  }
 
   return (
-    <div className="relative min-h-screen w-full bg-gradient-to-b from-purple-200 to-purple-300 p-6 lg:p-10">
-      <SparkleBackground />
-      <div className="relative z-10 mx-auto max-w-4xl bg-white rounded-3xl p-6 sm:p-8 lg:p-10 shadow-xl">
+    <PageShell maxWidth="max-w-4xl" rounded="rounded-3xl">
+        <AppHeader />
         <h1 className="text-center text-3xl sm:text-4xl font-extrabold text-purple-600">Quiz Time! ✏️</h1>
 
         {!completed ? (
@@ -107,15 +123,26 @@ function AssessmentPage() {
             </div>
 
             <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {current.options.map((opt) => (
-                <button
-                  key={opt.id}
-                  onClick={() => setSelected(opt.id)}
-                  className={`rounded-full px-6 py-4 font-extrabold text-white shadow-md transition-transform active:scale-[0.99] ${opt.color} ${selected === opt.id ? 'ring-4 ring-purple-400' : ''}`}
-                >
-                  {opt.label}
-                </button>
-              ))}
+              {current.options.map((opt) => {
+                const isSelected = selected === opt.id;
+                const isCorrect = opt.id === current.correct;
+                let colorClass = 'bg-purple-500 hover:bg-purple-600';
+                if (selected) {
+                  if (isCorrect) colorClass = 'bg-green-500';
+                  else if (isSelected) colorClass = 'bg-red-500';
+                  else colorClass = 'bg-gray-300';
+                }
+                return (
+                  <button
+                    key={opt.id}
+                    onClick={() => !selected && setSelected(opt.id)}
+                    disabled={!!selected}
+                    className={`rounded-full px-6 py-4 font-extrabold text-white shadow-md transition-colors active:scale-[0.99] disabled:cursor-not-allowed ${colorClass} ${isSelected ? 'ring-4 ring-purple-400' : ''}`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
             </div>
 
             <div className="mt-6">
@@ -129,7 +156,8 @@ function AssessmentPage() {
             </div>
           </>
         ) : (
-          <div className="mt-16 text-center">
+          <div className="relative overflow-hidden mt-16 text-center">
+            <Confetti />
             <div className="text-5xl mb-6">🎉</div>
             <h2 className="text-3xl font-extrabold text-purple-700">You did great!</h2>
             <p className="mt-3 text-lg font-semibold text-gray-700">You scored {score} out of {total}!</p>
@@ -156,14 +184,8 @@ function AssessmentPage() {
           </div>
         )}
 
-        <nav className="mt-10 grid grid-cols-4 gap-4 text-center text-gray-600">
-          <Link to="/home" className="rounded-2xl bg-gray-100 py-3 font-semibold">Home</Link>
-          <Link to="/history" className="rounded-2xl bg-gray-100 py-3 font-semibold">History</Link>
-          <Link to="/assessment" className="rounded-2xl bg-purple-100 py-3 font-semibold text-purple-700">Assessment</Link>
-          <Link to="/settings" className="rounded-2xl bg-gray-100 py-3 font-semibold">Settings</Link>
-        </nav>
-      </div>
-    </div>
+        <BottomNav />
+    </PageShell>
   );
 }
 

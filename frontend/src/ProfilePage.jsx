@@ -1,7 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import SparkleBackground from './SparkleBackground';
+import React, { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import PageShell from './PageShell';
+import AppHeader from './AppHeader';
+import BottomNav from './BottomNav';
+import Skeleton from './Skeleton';
 import { useModal } from './Modal';
+import { getProfilePhoto, setProfilePhoto } from './profilePhoto';
 
 function StatRow({ label, value }) {
   return (
@@ -52,6 +56,8 @@ function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [photo, setPhoto] = useState(() => getProfilePhoto());
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     fetchStats();
@@ -105,6 +111,30 @@ function ProfilePage() {
     navigate('/history');
   };
 
+  const handlePhotoPick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handlePhotoChange = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      await modal.alert('Please choose an image file.');
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      await modal.alert('Please choose an image smaller than 3MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setProfilePhoto(reader.result);
+      setPhoto(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleEditChildProfile = async () => {
     const newName = await modal.prompt("Child's name:", stats?.child_name || '');
     if (newName === null) return; // cancelled
@@ -125,9 +155,8 @@ function ProfilePage() {
   const name = stats?.child_name || 'Learner';
 
   return (
-    <div className="relative min-h-screen w-full bg-gradient-to-b from-purple-200 to-purple-300 p-6 lg:p-10">
-      <SparkleBackground />
-      <div className="relative z-10 mx-auto max-w-5xl bg-white rounded-[28px] p-6 sm:p-8 lg:p-10 shadow-xl">
+    <PageShell maxWidth="max-w-5xl">
+        <AppHeader />
         <h1 className="text-center text-3xl sm:text-4xl font-extrabold text-purple-600">{name}'s Profile</h1>
 
         {error && (
@@ -137,31 +166,59 @@ function ProfilePage() {
         )}
 
         <div className="mt-6 bg-gray-100 rounded-2xl p-5 flex items-center gap-4">
-          <div className="w-14 h-14 rounded-full bg-white/70 flex items-center justify-center text-2xl">👤</div>
-          <div>
-            <div className="font-extrabold text-gray-900">{name}'s Profile</div>
-            <div className="text-sm text-gray-600 font-semibold">
-              {loading
-                ? 'Loading...'
-                : `Age: ${stats?.child_age ?? '—'} | Active since: ${formatActiveSince(stats?.member_since)}`}
+          <div className="relative shrink-0">
+            <div className="w-16 h-16 rounded-full bg-white/70 border-2 border-white shadow flex items-center justify-center text-2xl overflow-hidden">
+              {photo ? <img src={photo} alt="Profile" className="w-full h-full object-cover" /> : '👤'}
             </div>
+            <button
+              onClick={handlePhotoPick}
+              aria-label="Change profile photo"
+              className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-purple-600 hover:bg-purple-700 text-white flex items-center justify-center text-xs shadow-md border-2 border-white transition active:scale-95"
+            >
+              📷
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handlePhotoChange}
+              className="hidden"
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-extrabold text-gray-900">{name}'s Profile</div>
+            {loading ? (
+              <Skeleton className="h-4 w-48 mt-1" />
+            ) : (
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                <span className="text-sm text-gray-600 font-semibold">Age: {stats?.child_age ?? '—'}</span>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-2.5 py-1 text-xs font-bold text-green-700">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+                  </span>
+                  Active {formatActiveSince(stats?.member_since)}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
         <div className="mt-6 bg-gray-100 rounded-2xl p-5">
           <div className="text-xl font-extrabold text-purple-700 mb-2">Progress Report</div>
-          <StatRow
-            label="Time Spent:"
-            value={loading ? '...' : `${stats?.time_spent_today_minutes ?? 0} minutes today`}
-          />
-          <StatRow
-            label="Quizzes Completed:"
-            value={loading ? '...' : `${stats?.quizzes_completed ?? 0} quizzes`}
-          />
-          <StatRow
-            label="Average Quiz Score:"
-            value={loading ? '...' : `${stats?.average_score_percentage ?? 0}%`}
-          />
+          {loading ? (
+            <div className="space-y-2 py-1">
+              <Skeleton className="h-5 w-full" />
+              <Skeleton className="h-5 w-full" />
+              <Skeleton className="h-5 w-full" />
+            </div>
+          ) : (
+            <>
+              <StatRow label="Time Spent:" value={`${stats?.time_spent_today_minutes ?? 0} minutes today`} />
+              <StatRow label="Quizzes Completed:" value={`${stats?.quizzes_completed ?? 0} quizzes`} />
+              <StatRow label="Average Quiz Score:" value={`${stats?.average_score_percentage ?? 0}%`} />
+            </>
+          )}
         </div>
 
         <div className="mt-6 bg-gray-100 rounded-2xl p-5">
@@ -188,14 +245,8 @@ function ProfilePage() {
           />
         </div>
 
-        <nav className="mt-10 grid grid-cols-4 gap-4 text-center text-gray-600">
-          <Link to="/home" className="rounded-2xl bg-purple-100 py-3 font-semibold text-purple-700">Home</Link>
-          <Link to="/history" className="rounded-2xl bg-gray-100 py-3 font-semibold">History</Link>
-          <Link to="/assessment" className="rounded-2xl bg-gray-100 py-3 font-semibold">Assessment</Link>
-          <Link to="/settings" className="rounded-2xl bg-gray-100 py-3 font-semibold">Settings</Link>
-        </nav>
-      </div>
-    </div>
+        <BottomNav />
+    </PageShell>
   );
 }
 

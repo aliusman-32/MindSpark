@@ -1,17 +1,12 @@
 import React, { useMemo } from 'react';
+import { useTheme } from './ThemeContext';
 
 function randomBetween(min, max) {
   return Math.random() * (max - min) + min;
 }
 
-const BLOBS = [
-  { color: '#c084fc', top: '-10%', left: '-8%', size: 380, duration: 16 },
-  { color: '#f472b6', top: '55%', left: '65%', size: 340, duration: 20 },
-  { color: '#60a5fa', top: '10%', left: '70%', size: 300, duration: 18 },
-  { color: '#fbbf24', top: '70%', left: '5%', size: 260, duration: 22 },
-];
-
 function SparkleBackground({ count = 22 }) {
+  const { theme } = useTheme();
   const sparkles = useMemo(() => {
     return Array.from({ length: count }).map((_, i) => {
       const size = randomBetween(5, 13);
@@ -28,7 +23,7 @@ function SparkleBackground({ count = 22 }) {
 
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none z-0" aria-hidden="true">
-      {BLOBS.map((b, i) => (
+      {theme.blobs.map((b, i) => (
         <div
           key={i}
           className="bg-blob"

@@ -36,3 +36,6 @@ Thumbs.db
 # Generated audio and video
 Audio/
 video/
+
+# Locally-generated RAG cache (grows every time a lesson topic is researched)
+backend/model/research_index/
